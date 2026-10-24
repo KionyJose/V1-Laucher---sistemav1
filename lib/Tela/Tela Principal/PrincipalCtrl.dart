@@ -187,9 +187,9 @@ class PrincipalCtrl with ChangeNotifier{
   
   List<String> listAbaGuias= ["Games","Cinema","Musica","Loja"];
   static const List<LojaGame> _todasLojas = [
+    LojaGame(nome: 'Descobrir', subtitulo: 'Grade de jogos dentro do launcher', url: 'https://store.steampowered.com', descobrir: true, cor: Color(0xFF6D3BC7), icone: Icons.explore_rounded, logo: 'assets/Lojas/descobrir.png'),
     LojaGame(nome: 'Loja Interna', subtitulo: 'Catálogo, trailers e downloads no launcher', url: '', interna: true, cor: Color(0xFF8B7CFF), icone: Icons.storefront_rounded, logo: 'assets/Lojas/interna.png'),
     LojaGame(nome: 'GOG', subtitulo: 'Clássicos e DRM-free', url: 'https://www.gog.com', cor: Color(0xFF6D42C7), icone: Icons.extension_rounded, logo: 'assets/Lojas/gog.png'),
-    LojaGame(nome: 'Descobrir', subtitulo: 'Grade de jogos dentro do launcher', url: 'https://store.steampowered.com', descobrir: true, cor: Color(0xFF6D3BC7), icone: Icons.explore_rounded, logo: 'assets/Lojas/descobrir.png'),
     LojaGame(nome: 'Steam', subtitulo: 'Abre no navegador', url: 'https://store.steampowered.com', cor: Color(0xFF1B5C8F), icone: Icons.sports_esports_rounded, logo: 'assets/Lojas/steam.png'),
     LojaGame(nome: 'Epic', subtitulo: 'Jogos grátis e lançamentos', url: 'https://store.epicgames.com/pt-BR', cor: Color(0xFF2A2A2A), icone: Icons.bolt_rounded, logo: 'assets/Lojas/epic.png'),
     LojaGame(nome: 'Microsoft', subtitulo: 'Xbox, Game Pass e PC', url: 'https://www.xbox.com/pt-br/games', cor: Color(0xFF107C10), icone: Icons.grid_view_rounded, logo: 'assets/Lojas/microsoft.png'),
