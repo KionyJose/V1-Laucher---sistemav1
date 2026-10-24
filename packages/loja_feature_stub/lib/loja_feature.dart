@@ -12,13 +12,13 @@ class _LojaIndisponivel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: const [
+            children: [
               Icon(Icons.storefront_outlined, size: 48),
               SizedBox(height: 12),
               Text('Loja interna não disponível nesta build.',
