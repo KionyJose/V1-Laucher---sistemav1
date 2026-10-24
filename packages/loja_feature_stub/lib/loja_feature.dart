@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// False nesta build pública: quem chama deve nem mostrar o card/botão da
+/// loja interna, não só recusar abri-la. A implementação real (pacote local,
+/// nunca versionado) exporta `true` no mesmo nome.
+const bool lojaInternaDisponivel = false;
+
 /// Implementação pública: a loja interna não está disponível nesta build.
 ///
 /// Quem builda localmente com o pacote privado (via `dependency_overrides`
@@ -12,13 +17,13 @@ class _LojaIndisponivel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
+            children: const [
               Icon(Icons.storefront_outlined, size: 48),
               SizedBox(height: 12),
               Text('Loja interna não disponível nesta build.',

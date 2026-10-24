@@ -29,11 +29,14 @@ Future<void> mostrarMenuLauncher(BuildContext context) async {
                         onPressed: () =>
                             Navigator.pop(dialogContext, 'downloads')),
                     const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                        icon: const Icon(Icons.storefront_rounded),
-                        label: const Text('Loja Interna'),
-                        onPressed: () => Navigator.pop(dialogContext, 'loja')),
-                    const SizedBox(height: 12),
+                    if (lojaInternaDisponivel) ...[
+                      OutlinedButton.icon(
+                          icon: const Icon(Icons.storefront_rounded),
+                          label: const Text('Loja Interna'),
+                          onPressed: () =>
+                              Navigator.pop(dialogContext, 'loja')),
+                      const SizedBox(height: 12),
+                    ],
                     TextButton(
                         onPressed: () => Navigator.pop(dialogContext),
                         child: const Text('Voltar')),

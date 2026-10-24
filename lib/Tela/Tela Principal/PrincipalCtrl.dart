@@ -186,7 +186,7 @@ class PrincipalCtrl with ChangeNotifier{
   List<String> tagVideo = List.of(GameVideoTags.values);
   
   List<String> listAbaGuias= ["Games","Cinema","Musica","Loja"];
-  List<LojaGame> listLojas = const [
+  static const List<LojaGame> _todasLojas = [
     LojaGame(nome: 'Loja Interna', subtitulo: 'Catálogo, trailers e downloads no launcher', url: '', interna: true, cor: Color(0xFF8B7CFF), icone: Icons.storefront_rounded, logo: 'assets/Lojas/interna.png'),
     LojaGame(nome: 'GOG', subtitulo: 'Clássicos e DRM-free', url: 'https://www.gog.com', cor: Color(0xFF6D42C7), icone: Icons.extension_rounded, logo: 'assets/Lojas/gog.png'),
     LojaGame(nome: 'Descobrir', subtitulo: 'Grade de jogos dentro do launcher', url: 'https://store.steampowered.com', descobrir: true, cor: Color(0xFF6D3BC7), icone: Icons.explore_rounded, logo: 'assets/Lojas/descobrir.png'),
@@ -199,6 +199,12 @@ class PrincipalCtrl with ChangeNotifier{
     LojaGame(nome: 'itch.io', subtitulo: 'Indies, game jams e pague quanto quiser', url: 'https://itch.io', cor: Color(0xFFFA5C5C), icone: Icons.favorite_rounded, logo: 'assets/Lojas/itchio.png'),
     LojaGame(nome: 'Mods', subtitulo: 'Mods, patches e conteúdo da comunidade', url: 'https://www.moddb.com', cor: Color(0xFF7A4F22), icone: Icons.construction_rounded, logo: 'assets/Lojas/moddb.png'),
   ];
+
+  /// Sem a loja interna disponível nesta build, o card nem aparece — não
+  /// adianta mostrar um atalho pra uma tela que só vai recusar abrir.
+  List<LojaGame> listLojas = lojaInternaDisponivel
+      ? _todasLojas
+      : _todasLojas.where((loja) => !loja.interna).toList();
   static String cine = "Cine";
   static String musc = "Musc";
   static String loja = "Loja";
