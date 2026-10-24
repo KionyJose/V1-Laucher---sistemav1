@@ -1,0 +1,60 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/windows/third_party/prerequisites/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Override local da loja interna — nunca aponta pro mesmo lugar em duas
+# máquinas e nunca deve ir pro repositório público.
+/pubspec_overrides.yaml
+
+# Chaves de API do usuário — nunca entram no repositório.
+# O lugar normal da chave do TMDB é a pasta de dados do usuário
+# (%LOCALAPPDATA%\V1 Launcher\v1_tmdb.json), fora daqui; estas linhas são a
+# rede de segurança para o dia em que um arquivo desses cair na pasta do
+# projeto.
+v1_tmdb.json
+**/v1_tmdb.json
+*.key
+.env
+.env.*

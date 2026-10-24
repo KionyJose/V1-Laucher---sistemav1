@@ -1,0 +1,235 @@
+// ignore_for_file: non_constant_identifier_names, use_build_context_synchronously, unused_local_variable
+import 'dart:io';
+
+import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:v1_game/Bando%20de%20Dados/TESTES.dart';
+import 'package:v1_game/Class/MouseCtrl.dart';
+import 'package:v1_game/Class/bruta.dart';
+import 'package:v1_game/Controllers/SonsSistema.dart';
+import 'package:v1_game/Controllers/modifica_wind.dart';
+import 'package:v1_game/Global.dart';
+import 'package:v1_game/Modelos/configs_sistema.dart';
+import 'package:v1_game/Tela/MyApp.dart';
+import 'package:v1_game/Metodos/nav_mouse_watcher.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:media_kit/media_kit.dart';
+import 'Metodos/leituraArquivo.dart';
+import 'Controllers/slim_mode_config_controller.dart';
+import 'Controllers/launcher_window_controller.dart';
+import 'Interface/ui_frame_binding.dart';
+import 'System/startup_readiness.dart';
+import 'System/app_storage.dart';
+
+WindowOptions windowOptions = const WindowOptions(
+  center: true,
+  skipTaskbar: false,
+  titleBarStyle: TitleBarStyle.hidden,
+);
+
+void main() async {
+  await iniciarLauncherAnterior();
+}
+
+// Entrada do launcher com MediaKit, provedores e integração de Pad do sistema.
+Future<void> iniciarLauncherAnterior() async {
+  LauncherFrameBinding();
+  MediaKit.ensureInitialized();
+  localizaCaminhos();
+  final readiness = await StartupReadiness.check();
+
+  // Inicializa o sistema de áudio SoLoud
+  await SonsSistema.init();
+  await SonsSistema.preloadCommonSounds(); // Pré-carrega todos os sons
+
+  // Inicializa captura do botão Xbox/PlayStation Guide
+  await RawInputGamepad.inicializar();
+  // Inicializa o observador do rastro (mouse) do nav_flutuante
+
+  NavMouseWatcher.start();
+  // Desabilita Xbox Game Bar e Steam ao iniciar o sistema
+  ModificaWind.desabilitarXboxESteam();
+  // Must add this line.
+  MouseCtrl.primeiroMovimento();
+  await windowManager.ensureInitialized();
+  await configucacoesSistema();
+  await windowManager.waitUntilReadyToShow(
+    windowOptions,
+    () async {
+      await LauncherWindowController.instance.initialize();
+      await windowManager.show();
+      await windowManager.focus();
+    },
+  );
+  if (configSistema.intro) SonsSistema.intro();
+  await registrarAppNoSetupV1();
+
+  // semBarras();
+  if (readiness.storageReady) await TESTES().testes();
+
+  // Windows usa pastas do usuário, sem permissão de armazenamento do Android.
+  if (Platform.isWindows) {
+    runApp(MyApp(readiness: readiness, onStorageRecovered: configucacoesSistema));
+    return;
+  }
+
+  // Solicitar permissão de armazenamento externo
+  var status = await Permission.storage.request();
+  if (status.isGranted) runApp(const MyApp());
+  // Se a permissão não for concedida, exiba uma mensagem ao usuário ou tome outra ação apropriada
+  if (!status.isGranted) debugPrint('Permissão de armazenamento não concedida');
+}
+
+Future<void> configucacoesSistema() async {
+  // Carrega configurações do arquivo JSON
+  configSistema = await ConfigSistema.load();
+  UiFrameRateController.apply(configSistema.uiFps);
+  await const SlimModeConfigController().load();
+  debugPrint(
+      "✓ Configurações carregadas: volume=${configSistema.volume}, intro=${configSistema.intro}, viewType=${configSistema.viewType}");
+}
+
+localizaCaminhos() {
+  // Obtém o caminho completo do executável em execução
+  String caminhoExecutavel = Platform.resolvedExecutable;
+  // Cria um objeto File a partir do caminho do executável
+  File arquivoExecutavel = File(caminhoExecutavel);
+  // Obtém o diretório onde o executável está localizad
+  Directory diretorioAtual = arquivoExecutavel.parent;
+  // Obtém o diretório pai do diretório atual
+  Directory diretorioPai = diretorioAtual.parent;
+  //C:\_Flutter\Game Interfacie\v1_game\build\windows\x64\runner\Debug\assets\Scripts
+  // String? minhaPasta = Platform.environment['SystemRoot'];
+  // Caminho do aplicativo que você deseja usar para abrir o arquivo
+  localPai = diretorioPai.path;
+  localPath = diretorioAtual.path;
+  assetsPath = "${diretorioAtual.path}\\data\\flutter_assets\\assets\\";
+
+  criaAtalhoTecladoApp();
+}
+
+Future<void> registrarAppNoSetupV1() async {
+  if (!Platform.isWindows) return;
+
+  final localAppData = Platform.environment['LOCALAPPDATA'];
+  if (localAppData == null || localAppData.isEmpty) {
+    debugPrint(
+        'LOCALAPPDATA nao encontrado. Configuracao do setupV1 ignorada.');
+    return;
+  }
+
+  final publishedDir = Directory(p.join(localAppData, 'setupV1', 'Published'));
+  final executablePath = Platform.resolvedExecutable;
+  final processName = p.basenameWithoutExtension(executablePath);
+  const displayName = 'V1 Launcher';
+  final iconCandidate = File(p.join(
+    p.dirname(executablePath),
+    'data',
+    'flutter_assets',
+    'assets',
+    'IconeAppV1.png',
+  ));
+  final iconPath = iconCandidate.existsSync() ? iconCandidate.path : '';
+
+  try {
+    if (!publishedDir.existsSync()) {
+      publishedDir.createSync(recursive: true);
+    }
+
+    final configFile = File(p.join(publishedDir.path, 'monitor_app.txt'));
+
+    final conteudo = _gerarConfigSetupV1(
+      executablePath: executablePath,
+      processName: processName,
+      displayName: displayName,
+      iconPath: iconPath,
+    );
+
+    await configFile.writeAsString(conteudo);
+    debugPrint('Configuracao do setupV1 atualizada em: ${configFile.path}');
+  } catch (e) {
+    debugPrint('Erro ao atualizar configuracao do setupV1: $e');
+  }
+}
+
+String _gerarConfigSetupV1({
+  required String executablePath,
+  required String processName,
+  required String displayName,
+  required String iconPath,
+}) {
+  return '''
+# Configuracao do app monitorado pelo setupV1
+#
+# Este arquivo deve ficar na mesma pasta do setupV1.exe publicado.
+# Pasta segura padrao:
+# %LOCALAPPDATA%\\setupV1\\Published
+#
+# Como preencher:
+# executablePath=C:\\caminho\\do\\V1Laucher.exe
+# processName=V1Laucher
+# displayName=V1Laucher
+# iconPath=C:\\caminho\\opcional\\icone.png
+#
+# Regras:
+# - executablePath e o caminho que sera aberto ao clicar no monitor.
+# - processName e o nome do processo sem ".exe", usado para saber se esta aberto.
+# - displayName e o nome mostrado na tela.
+# - iconPath e opcional. Se ficar vazio, usa Assets\\IconeAppV1.png.
+#
+# assinatura=V1 Launcher atualizado automaticamente
+
+executablePath=$executablePath
+processName=$processName
+displayName=$displayName
+iconPath=$iconPath
+''';
+}
+
+criaAtalhoTecladoApp() async {
+  try {
+  String caminhoDesktop = await LerArquivos().getDesktopPath();
+  // Atalho App
+  criarAtalho(
+    origem: "$localPath\\v1_game.exe",
+    destino: "$caminhoDesktop\\V1 Launcher.lnk",
+  );
+  // Atalho Teclado
+  final teclado = '$localPai\\TecladoVirtual\\teclado_virtual.exe';
+  if (File(teclado).existsSync()) {
+    criarAtalho(
+      origem: teclado,
+      destino: p.join(AppStorage.root.path, 'teclado_virtual.lnk'),
+    );
+  }
+  } catch (error) {
+    debugPrint('Não foi possível criar os atalhos do usuário: $error');
+  }
+}
+
+void criarAtalho({required String origem, required String destino}) {
+  final script = '''
+  \$WshShell = New-Object -ComObject WScript.Shell
+  \$Shortcut = \$WshShell.CreateShortcut('${destino.replaceAll("'", "''")}')
+  \$Shortcut.TargetPath = '${origem.replaceAll("'", "''")}'
+  \$Shortcut.Save()
+  ''';
+
+  final processo = Process.runSync('powershell', ['-Command', script]);
+
+  if (processo.exitCode == 0) {
+    debugPrint('Atalho criado em: $destino');
+  } else {
+    debugPrint('Erro ao criar atalho: ${processo.stderr}');
+  }
+}
+
+semBarras() {
+  doWhenWindowReady(() {
+    final win = appWindow;
+    // win.maximize();
+    win.show();
+  });
+}

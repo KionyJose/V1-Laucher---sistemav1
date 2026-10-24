@@ -1,0 +1,11 @@
+name: loja_feature
+description: Stub público da loja interna. A implementação real é um pacote local, nunca versionado.
+publish_to: 'none'
+version: 0.0.1
+
+environment:
+  sdk: '>=3.1.5 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter

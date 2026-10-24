@@ -1,0 +1,339 @@
+// ignore_for_file: file_names, must_be_immutable
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:v1_game/Class/wallpapercave_image_cache.dart';
+import 'package:provider/provider.dart';
+import 'package:v1_game/Class/Paad.dart';
+import 'package:v1_game/Controllers/MovimentoSistema.dart';
+import 'package:v1_game/Modelos/ImgWebScrap.dart';
+import 'package:v1_game/Widgets/LoadWid.dart';
+
+/// Formato sempre; resolução só quando a página informou a do arquivo. Antes
+/// o rótulo era montado sem checar, e uma imagem sem resolução conhecida
+/// aparecia como "x - JPG".
+String _legenda(ImgWebScrap imagem) {
+  final formato = imagem.imageUrl.split('.').last.toUpperCase();
+  final temResolucao =
+      imagem.largura.trim().isNotEmpty && imagem.altura.trim().isNotEmpty;
+  return temResolucao
+      ? '${imagem.largura}x${imagem.altura} - $formato'
+      : formato;
+}
+
+class VisualizadorImgWeb extends StatefulWidget {
+  const VisualizadorImgWeb({required this.list, super.key});
+  final List<ImgWebScrap> list;
+
+  @override
+  State<VisualizadorImgWeb> createState() => _VisualizadorImgWebState();
+}
+
+class _VisualizadorImgWebState extends State<VisualizadorImgWeb> {
+  String nomeImg = "";
+  int indexFoto = 0;
+  final FocusScopeNode _focusScope = FocusScopeNode();
+  final FocusNode _keyboardFocus = FocusNode();
+  final CarouselSliderController _listCtrl = CarouselSliderController();
+  late final List<FocusNode> _imageFocusNodes;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageFocusNodes = List.generate(widget.list.length, (_) => FocusNode());
+  }
+
+  escutaPad(BuildContext ctx, String event) {
+    try {
+      if (nomeImg.isEmpty) nomeImg = widget.list.first.imageUrl;
+    } catch (_) {}
+
+    event = MovimentoSistema.normalizaEntrada(event);
+    if (event.isEmpty) return;
+
+    if (event == "DIREITA" || event == "ESQUERDA") {
+      MovimentoSistema.direcaoListView(_focusScope, event);
+      if (event == "DIREITA") {
+        _listCtrl.nextPage(
+          duration: const Duration(milliseconds: 160),
+        );
+      }
+      if (event == "ESQUERDA") {
+        _listCtrl.previousPage(
+          duration: const Duration(milliseconds: 160),
+        );
+      }
+    }
+    if (event == "3") {
+      _limparClickPad(ctx);
+      return Navigator.pop(ctx);
+    } else if (event == "2") {
+      _limparClickPad(ctx);
+      return Navigator.pop(ctx, nomeImg);
+    }
+
+    _limparClickPad(ctx);
+  }
+
+  void _limparClickPad(BuildContext ctx) {
+    final paad = Provider.of<Paad>(ctx, listen: false);
+    if (paad.click.isEmpty) return;
+    paad.click = "";
+    paad.attTela();
+  }
+
+  keyPress(BuildContext ctx, KeyEvent key) async {
+    if (key is KeyDownEvent || key is KeyRepeatEvent) {
+      debugPrint("Teclado Press: ${key.logicalKey.debugName}");
+      String event = MovimentoSistema.convertKeyBoard(key.logicalKey.keyLabel);
+      escutaPad(ctx, event);
+    }
+  }
+
+  onFocusChangeImg(BuildContext ctx, int index) {
+    // nomeImg = widget.list[index].imageUrl;
+    // indexFoto = index;
+    debugPrint(" ================${index.toString()}");
+    debugPrint(index.toString());
+  }
+
+  @override
+  void dispose() {
+    _focusScope.dispose();
+    _keyboardFocus.dispose();
+    for (final node in _imageFocusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyboardListener(
+        // Escuta teclado Press;
+        includeSemantics: false,
+        focusNode: _keyboardFocus,
+        autofocus: true,
+        onKeyEvent: (KeyEvent event) => keyPress(context, event),
+        child: escutaPadWid(context));
+  }
+
+  escutaPadWid(BuildContext context) {
+    return Selector<Paad, String>(
+      selector: (context, paad) => paad.click, // Escuta apenas click
+      builder: (context, valorAtual, child) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          escutaPad(context, valorAtual); // Isso pode chamar o showDialog
+        });
+        return Stack(
+          children: [
+            body(context),
+            const Align(
+              alignment: Alignment.center,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 120),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Icon(Icons.arrow_back_ios, color: Colors.white),
+                    Icon(Icons.arrow_forward_ios, color: Colors.white),
+                  ],
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(
+                      right: 10,
+                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: Colors.black45,
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text("B | O  -",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20)),
+                        Text(" Voltar  ",
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 18)),
+                        Icon(Icons.backspace_rounded, color: Colors.red),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.only(right: 10, bottom: 30),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: Colors.black45,
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text("X | A  -",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20)),
+                        Text(" Download  ",
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 18)),
+                        Icon(Icons.download, color: Colors.blue),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  body(BuildContext context) {
+    return Center(
+      child: FocusScope(
+        node: _focusScope,
+        child: CarouselSlider(
+            carouselController: _listCtrl,
+            options: CarouselOptions(
+              height: MediaQuery.of(context).size.height * 1.0,
+              onPageChanged: (index, ctrls) {
+                nomeImg = widget.list[index].imageUrl;
+                indexFoto = index;
+                // debugPrint(" ================${index.toString()}" );
+                // debugPrint(index.toString());
+              },
+              pageSnapping: true,
+              autoPlay: false, // Habilita autoplay quando nao focado.
+              enlargeCenterPage: true, // Centraliza e destaca o item ativo
+              enableInfiniteScroll: true,
+              viewportFraction: 0.8, // Tamanho do item visível
+              initialPage: 0,
+              // scrollDirection: Axis.vertical
+              // enlargeStrategy: CenterPageEnlargeStrategy.zoom
+            ),
+            items: [
+              for (int i = 0; i < widget.list.length; i++)
+                GestureDetector(
+                  onTap: () {
+                    return Navigator.pop(context, widget.list[i].imageUrl);
+                  },
+                  child: Focus(
+                    focusNode: _imageFocusNodes[i],
+                    onFocusChange: (hasFocus) =>
+                        hasFocus ? onFocusChangeImg(context, i) : null,
+                    child: Stack(
+                      children: [
+                        Align(
+                          alignment: Alignment.center,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 500),
+                            child: CachedNetworkImage(
+                              imageUrl: widget.list[i]
+                                  .imageUrl, // Substitua pelo URL da sua imagem
+                              cacheManager: WallpapercaveImageCache.manager,
+                              httpHeaders: WallpapercaveImageCache.headers,
+                              placeholder: (context, url) {
+                                debugPrint(
+                                    '========================================');
+                                debugPrint('CARREGANDO IMAGEM [$i]:');
+                                debugPrint('URL: $url');
+                                debugPrint(
+                                    '========================================');
+                                return const Padding(
+                                  padding: EdgeInsets.all(49),
+                                  child: SizedBox(
+                                      child: LoadingIco(
+                                    color: Colors.amber,
+                                  )),
+                                );
+                              },
+                              errorWidget: (context, url, error) {
+                                debugPrint(
+                                    '========================================');
+                                debugPrint('ERRO AO CARREGAR IMAGEM [$i]:');
+                                debugPrint('URL Tentada: $url');
+                                debugPrint(
+                                    'Tipo de Erro: ${error.runtimeType}');
+                                debugPrint('Mensagem: ${error.toString()}');
+                                debugPrint(
+                                    'Largura esperada: ${widget.list[i].largura}');
+                                debugPrint(
+                                    'Altura esperada: ${widget.list[i].altura}');
+                                debugPrint(
+                                    'Formato: ${widget.list[i].imageUrl.split('.').last}');
+                                debugPrint(
+                                    'URL Completa: ${widget.list[i].imageUrl}');
+                                debugPrint(
+                                    '========================================');
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.error,
+                                          size: 200, color: Colors.black12),
+                                      const SizedBox(height: 20),
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          'Erro ao carregar\n${url.length > 50 ? "${url.substring(0, 50)}..." : url}',
+                                          style: const TextStyle(
+                                              color: Colors.red, fontSize: 12),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            margin: const EdgeInsets.only(
+                                left: 10, top: 5, bottom: 30),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(25),
+                              color: Colors.black45,
+                            ),
+                            child: Text(
+                              _legenda(widget.list[i]),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ]),
+      ),
+    );
+  }
+}

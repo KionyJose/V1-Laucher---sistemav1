@@ -1,0 +1,397 @@
+import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:v1_game/Modelos/IconeInicial.dart';
+
+import '../Global.dart';
+import '../System/app_storage.dart';
+
+class DB{
+
+  
+  // String dbPath = "C:\\Users\\kiony\\OneDrive\\Área de Trabalho\\testeDBLocal.txt"; 
+  String dbPath = AppStorage.dataFile('testeDBLocal.txt').path;
+  String dbPathConfigSis = AppStorage.dataFile('v1_config.txt').path;
+
+  leiaBanco() async =>  await leituraDeDados();
+  
+  attDados(List<IconInicial> list) async {
+    // Solicitar permissão para escrever na área de trabalho
+    final granted = Platform.isWindows ||
+        (await Permission.storage.request()).isGranted;
+    String  lista =  codificaLista(list);
+    if (granted) {
+      // Escrever conteúdo no arquivo
+      File file = File(dbPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(lista);
+
+    } else {
+      // Se a permissão não for concedida, exiba uma mensagem ao usuário ou tome outra ação apropriada
+      debugPrint('Permissão para escrever na área de trabalho não concedida');
+    }
+
+  }
+
+  codificaLista(List<IconInicial> list){
+    String listaInLine = "";
+    int index = 1;
+    for (IconInicial ico in list) { 
+      
+      listaInLine += "item-${index.toString().padLeft(1,'0')}\n";
+      listaInLine += "lugar: ${ico.lugar}\n";
+      listaInLine += "nome: ${ico.nome}\n";
+      listaInLine += "local: ${ico.local}\n";
+      listaInLine += "img: ${ico.imgStr}\n";
+      listaInLine += "imgAux: ${ico.imgAuxStr}\n";      
+
+      index++;
+
+    }
+    return listaInLine;    
+    // item-01
+    // lugar: 01
+    // nome: Harry Pother
+    // local: D:\\GAMES\\HOGWARTS LEGACY\\Hogwarts Legacy\\Phoenix\\Binaries\\Win64\\HogwartsLegacy.exe
+    // img: C:\\Users\\kiony\\OneDrive\\Imagens\\Walpappers\\1102284.jpg
+    // imgAux: caminho/.png
+  }
+  verificaDocInicio(){
+    // Verifica se o arquivo existe
+    File dbFile = File(dbPath);
+    if (!dbFile.existsSync()) {
+      // Cria o arquivo se ele não existir
+      dbFile.createSync(recursive: true); // recursive: true para criar diretórios se necessário
+      // dbFile.writeAsStringSync("Arquivo criado com sucesso!"); // Escreve conteúdo inicial, se necessário
+      debugPrint("Arquivo criado em: $dbPath");
+    } else {
+      debugPrint("Arquivo já existe em: $dbPath");
+    }
+  }
+
+  leituraConfigSis() async {
+     // Verifica se o arquivo existe
+    File dbFile = File(dbPathConfigSis);
+    if (!dbFile.existsSync()) {
+      // Cria o arquivo se ele não existir
+      String isLine = "";
+      
+      isLine += "volume=0.9\n";
+      isLine += "tela_inicial_tipo=1\n";
+      isLine += "videos_tela_principal=true\n";
+      isLine += "videos_card_game=false\n";
+      isLine += "intro=true\n";    
+      dbFile.createSync(recursive: true); // recursive: true para criar diretórios se necessário
+      dbFile.writeAsStringSync(isLine); // Escreve conteúdo inicial, se necessário
+      // dbFile.writeAsStringSync("tela_inicial_tipo=1"); // Escreve conteúdo inicial, se necessário
+      // dbFile.writeAsStringSync("videos_tela_principal=true"); // Escreve conteúdo inicial, se necessário
+      // dbFile.writeAsStringSync("videos_card_game=false"); // Escreve conteúdo inicial, se necessário
+      debugPrint("Arquivo criado em: $dbPathConfigSis");
+    } else {
+      debugPrint("Arquivo já existe em: $dbPathConfigSis");
+    }
+    var file = File(dbPathConfigSis);
+    Stream<String> lines = file.openRead()
+      .transform(utf8.decoder) // Decode bytes to UTF-8.
+      .transform(const LineSplitter()); // Convert stream to individual lines.
+
+    await for (String line in lines) {
+      String value = line.split('=')[1];
+      if(line.contains("volume")) configSistema.volume = double.parse(value);      
+      if(line.contains("tela_inicial_tipo")) configSistema.telaInicialTipo = int.parse(value);      
+      if(line.contains("videos_tela_principal")) configSistema.videosTelaPrincipal = value == "true";
+      if(line.contains("videos_card_game")) configSistema.noticias = value == "true";
+      
+      
+    }
+  }
+
+  leituraDeDados() async {
+    verificaDocInicio();
+    var file = File(dbPath);
+    bool start = false;
+
+    List<String> itemCard = [];
+    List<IconInicial> listIconsInicial = [];
+
+    Stream<String> lines = file.openRead()
+      .transform(utf8.decoder) // Decode bytes to UTF-8.
+      .transform(const LineSplitter()); // Convert stream to individual lines.
+   
+      await for (String line in lines) {        
+        if(line.contains("item-") && start){
+          IconInicial iconIni =  IconInicial(itemCard);
+          listIconsInicial.add(iconIni);
+
+          // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+          // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+          // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+          // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+          itemCard.clear();
+        }
+        start =true;
+        itemCard.add(line);
+
+
+      }
+      if(itemCard.isNotEmpty){        
+        IconInicial iconIni =  IconInicial(itemCard);
+        listIconsInicial.add(iconIni);
+
+        // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+        // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+        // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+        // listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);listIconsInicial.add(iconIni);
+      }
+    debugPrint(listIconsInicial.length.toString());
+    return listIconsInicial;
+  }
+
+  static Process? process; // Variável para armazenar o processo
+  static int? processoAbertoPid;
+  static String? processoAbertoPath;
+
+  bool _isExecutavelDireto(String filePath) {
+    final lower = filePath.toLowerCase();
+    return lower.endsWith('.exe') || lower.endsWith('.lnk');
+  }
+
+  Future<Set<int>> _pidsPorCaminhoExecutavel(String filePath) async {
+    if (!Platform.isWindows || !_isExecutavelDireto(filePath)) return {};
+    final escaped = filePath.replaceAll("'", "''");
+    final script = "Get-CimInstance Win32_Process | "
+        "Where-Object { \$_.ExecutablePath -eq '$escaped' } | "
+        "Select-Object -ExpandProperty ProcessId";
+    try {
+      final result = await Process.run(
+        'powershell',
+        ['-NoProfile', '-Command', script],
+        runInShell: true,
+      );
+      if (result.exitCode != 0) return {};
+      return result.stdout
+          .toString()
+          .split(RegExp(r'\s+'))
+          .map((v) => int.tryParse(v.trim()))
+          .whereType<int>()
+          .toSet();
+    } catch (e) {
+      debugPrint('Erro buscando PID por caminho: $e');
+      return {};
+    }
+  }
+
+  openFile(String filePath, {String? workingDirectory, bool throwOnError = false}) async {
+    try {
+      final pidsAntes = await _pidsPorCaminhoExecutavel(filePath);
+      debugPrint('========================================');
+      debugPrint('ABRINDO ARQUIVO/JOGO');
+      debugPrint('Caminho: $filePath');
+      
+      // Detecta se é um deep link (Epic Games, Steam, etc.)
+      if (filePath.contains('://')) {
+        debugPrint('Detectado deep link de launcher');
+        
+        if (filePath.startsWith('com.epicgames.launcher://')) {
+          debugPrint('Link da Epic Games detectado');
+        } else if (filePath.startsWith('steam://')) {
+          debugPrint('Link do Steam detectado');
+        }
+        
+        // Usa cmd /c start para processar protocolos customizados
+        process = await Process.start(
+          'cmd',
+          ['/c', 'start', '', filePath],
+          runInShell: true,
+        );
+        processoAbertoPid = process?.pid;
+        processoAbertoPath = filePath;
+        
+        debugPrint('Deep link processado com sucesso');
+        debugPrint('========================================');
+        return;
+      }
+      
+      // Verifica se é um arquivo .exe ou .lnk
+      if (filePath.toLowerCase().endsWith('.exe') || filePath.toLowerCase().endsWith('.lnk')) {
+        debugPrint('Executável detectado: ${filePath.split('\\').last}');
+        
+        // Para .exe, executa sem bloquear a aplicação (modo detached).
+        process = await Process.start(
+          filePath,
+          [],
+          mode: ProcessStartMode.normal,
+          workingDirectory: workingDirectory,
+        );
+        processoAbertoPid = process?.pid;
+        processoAbertoPath = filePath;
+        process?.stdout.listen((_) {});
+        process?.stderr.listen((_) {});
+        await Future.delayed(const Duration(milliseconds: 700));
+        final pidsDepois = await _pidsPorCaminhoExecutavel(filePath);
+        final novosPids = pidsDepois.difference(pidsAntes);
+        if (novosPids.isNotEmpty) {
+          processoAbertoPid = novosPids.first;
+          debugPrint('PID real do executavel detectado: $processoAbertoPid');
+        }
+        debugPrint('Executável iniciado (não bloqueante) com sucesso');
+        debugPrint('========================================');
+        return;
+      }
+      
+      // Para outros tipos, usa explorer
+      debugPrint('Tipo desconhecido, usando explorer');
+      openUrl(filePath);
+      debugPrint('========================================');
+
+    } on ProcessException catch (e) {
+      if (throwOnError) rethrow;
+      debugPrint('========================================');
+      debugPrint('ERRO ProcessException ao abrir arquivo');
+      debugPrint('Mensagem: ${e.message}');
+      debugPrint('Tentando método alternativo...');
+      debugPrint('========================================');
+      openUrl(filePath);
+    } catch (e) {
+      debugPrint('========================================');
+      debugPrint('ERRO desconhecido: $e');
+      if (throwOnError) rethrow;
+      debugPrint('========================================');
+    }
+  }
+
+  Future<bool> closeOpenedFile() async {
+    final pids = <int>{};
+    if (processoAbertoPid != null) pids.add(processoAbertoPid!);
+    final path = processoAbertoPath;
+    if (path != null && path.isNotEmpty) {
+      pids.addAll(await _pidsPorCaminhoExecutavel(path));
+    }
+
+    if (pids.isEmpty) {
+      debugPrint('Nenhum processo aberto pelo app para fechar.');
+      return false;
+    }
+
+    debugPrint('Tentando fechar processo aberto: PIDs ${pids.join(', ')}');
+    try {
+      var fechou = false;
+      if (Platform.isWindows) {
+        for (final pid in pids) {
+          final result = await Process.run(
+            'taskkill',
+            ['/PID', pid.toString(), '/T', '/F'],
+            runInShell: true,
+          );
+          final ok = result.exitCode == 0;
+          debugPrint(ok
+              ? 'Processo $pid fechado com taskkill.'
+              : 'Falha no taskkill $pid: ${result.stderr}');
+          fechou = fechou || ok;
+        }
+        if (fechou) {
+          process = null;
+          processoAbertoPid = null;
+          processoAbertoPath = null;
+          return true;
+        }
+      }
+
+      final killed = process?.kill(ProcessSignal.sigterm) ?? false;
+      if (killed) {
+        process = null;
+        processoAbertoPid = null;
+        processoAbertoPath = null;
+      }
+      return killed;
+    } catch (e) {
+      debugPrint('Erro ao fechar processo aberto: $e');
+      return false;
+    }
+  }
+
+  static void closeOpenedFileFast() {
+    debugPrint('[FECHAR_APP] Limpando processo aberto pelo launcher...');
+    final pid = processoAbertoPid;
+    debugPrint('[FECHAR_APP] PID salvo: ${pid?.toString() ?? "nenhum"}');
+    try {
+      final matou = process?.kill(ProcessSignal.sigkill) ?? false;
+      debugPrint('[FECHAR_APP] kill direto no Process: $matou');
+    } catch (e) {
+      debugPrint('[FECHAR_APP] Erro no kill direto: $e');
+    }
+
+    if (Platform.isWindows && pid != null) {
+      debugPrint('[FECHAR_APP] Disparando taskkill /PID $pid /T /F sem aguardar.');
+      unawaited(Process.start(
+        'taskkill',
+        ['/PID', pid.toString(), '/T', '/F'],
+        runInShell: true,
+        mode: ProcessStartMode.detached,
+      ).then((_) {
+        debugPrint('[FECHAR_APP] taskkill iniciado.');
+      }).catchError((e) {
+        debugPrint('[FECHAR_APP] Erro ao iniciar taskkill: $e');
+      }));
+    }
+
+    process = null;
+    processoAbertoPid = null;
+    processoAbertoPath = null;
+    debugPrint('[FECHAR_APP] Referencias de processo limpas.');
+  }
+
+  openUrl(String filePath){
+    String str = filePath.replaceAll(r'\\', r'\');
+    
+    debugPrint('========================================');
+    debugPrint('ABRINDO COM EXPLORER');
+    debugPrint('Caminho processado: $str');
+    
+    try{
+      // Se contém protocolo, usa start ao invés de explorer
+      if (str.contains('://')) {
+        debugPrint('Usando cmd start para protocolo');
+        Process.run('cmd', ['/c', 'start', '', str], runInShell: true);
+      } else {
+        debugPrint('Usando explorer para arquivo/pasta');
+        Process.run('explorer', [str]);
+      }
+      debugPrint('========================================');
+    } on ProcessException catch (e) {
+        debugPrint('========================================');
+        debugPrint('ERRO ao abrir com explorer: ${e.message}');
+        debugPrint('========================================');
+      } catch (e) {
+        debugPrint('========================================');
+        debugPrint('ERRO desconhecido no openUrl: $e');
+        debugPrint('========================================');
+      }
+  }
+
+  void addAppToStartup() {
+    String appName, appPath;
+    String executablePath = Platform.resolvedExecutable;
+    
+    appName = executablePath.split('\\').last;
+    appPath = executablePath;
+    try {
+      final result = Process.runSync('reg.exe', [
+        'add', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+        '/v', appName, '/t', 'REG_SZ', '/d', '"$appPath"', '/f',
+      ]);
+      if (result.exitCode != 0) {
+        debugPrint('Windows não permitiu configurar a inicialização: ${result.stderr}');
+        return;
+      }
+      debugPrint('Aplicativo adicionado ao iniciar com o Windows.');
+    } catch (e) {
+      debugPrint('Erro ao adicionar ao início: $e');
+    }
+  }
+
+
+}

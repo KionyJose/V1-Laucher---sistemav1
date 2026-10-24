@@ -1,0 +1,790 @@
+// ignore_for_file: avoid_print, unused_local_variable, file_names, deprecated_member_use
+import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:v1_game/Class/Paad.dart';
+import 'package:v1_game/Class/WebScrap.dart';
+import 'package:v1_game/Widgets/LoadWid.dart';
+
+import '../../Interface/pad_confirmation.dart';
+import '../../Interface/futuristic_material.dart';
+import '../../Bando de Dados/db.dart';
+import '../../Controllers/MovimentoSistema.dart';
+import '../../Modelos/IconeInicial.dart';
+import '../../Modelos/MediaCanal.dart';
+import '../../Tela/NavegadorPasta.dart';
+import '../../Tela/SeletorImagens/SeletorImagens.dart';
+
+class Pops {
+  static popTela(BuildContext ctx, Widget tela) {
+    return showDialog(
+      context: ctx,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: tela,
+        ),
+      ),
+    );        
+  }
+  popScren( Widget tela) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: tela,
+      ),
+    );
+  }
+
+  /// Folha "Entrando no game...".
+  ///
+  /// **Ela espera o jogador.** Fica na tela enquanto o jogo está na frente e
+  /// só sai com A ou B, respeitando um mínimo de 2 segundos. Quem decide a
+  /// volta ao launcher é ele, pelas ações que já existem — fechá-la junto com
+  /// a abertura do jogo tirava essa decisão e restaurava a tela sozinha.
+  ///
+  /// Sem `transitionAnimationController` de propósito.
+  ///
+  /// O controller anterior era criado com `vsync: Navigator.of(ctx)` e nunca
+  /// descartado: cada abertura de jogo deixava um Ticker vivo preso ao
+  /// Navigator. Descartá-lo ao fim também não serve — ele é quem conduz a
+  /// animação de saída, e liberá-lo cedo deixa a folha congelada na tela.
+  /// A transição padrão não tem dono para esquecer e ainda entra mais rápido,
+  /// que é o que esta folha precisa: aparecer no instante do clique.
+  Future<void> carregandoGames(BuildContext ctx, String str) async {
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true, // Permite expandir o conteúdo
+      // Sem véu e sem canto arredondado: o escurecimento inteiro é o
+      // gradiente da folha, que encosta nas bordas e some para cima.
+      barrierColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      backgroundColor: Colors.transparent,
+      // O Material 3 limita a folha a 640 px em tela larga; aqui ela precisa
+      // atravessar a tela de ponta a ponta.
+      constraints: const BoxConstraints(maxWidth: double.infinity),
+      builder: (context) {
+        return _CarregandoGamesSheet(texto: str);
+      },
+    );
+  }
+
+  static Future<MediaCanal?> popNovoMediaCard(
+      BuildContext ctx, String tipo, {MediaCanal? inicial}) async {
+    return showDialog<MediaCanal>(
+      context: ctx,
+      builder: (_) => _NovoMediaCardPop(tipo: tipo, inicial: inicial),
+    );
+  }
+
+  static Future<String?> popOpcoesMediaCard(BuildContext ctx) async {
+    return showDialog<String>(
+      context: ctx,
+      builder: (_) => const _OpcoesMediaCardPop(),
+    );
+  }
+
+
+  // List<String> commandos = [];
+  
+  // popMenuTelHome2ss(BuildContext context) async {
+  //   try{
+  //   bool statePop = true;
+  //   String retorno = "";
+  //   int total = 7;
+  //   FocusScopeNode focusScope = FocusScopeNode();
+  //   String str0 = "Abrir";
+  //   String str1 = "Caminho do game";
+  //   String str2 = "Caminho de Imagem";
+  //   String str3 = "Imagem da Download";
+  //   String str4 = "Atalhos";
+  //   String str5 = "Excluir Card";
+  //   String str6 = "Add";
+
+  //   List<FocusNode> focusNodes = List.generate(total, (value)=> FocusNode());
+
+
+  //   comandos(BuildContext context, String event){
+  //     int total = 0;
+  //     if(commandos.length == 2){
+  //       commandos.removeAt(0);
+  //       commandos.add(event);
+  //       if(commandos[0] == "SELECT")total++;
+  //       if(commandos[1] == "SELECT")total++;
+  //       if(total == 2) Navigator.pop(context, "");
+  //       if(total == 2) return false;
+  //     }
+  //     commandos.add(event);
+  //     return true;
+  //   }
+
+  //   escutaPad(String event) {
+  //     if(!statePop || event =="") return;
+  //     debugPrint("=======   Escuta Pop Menu  =======");
+
+  //     statePop = comandos(context, event);
+      
+
+  //     MovimentoSistema.direcaoListView(focusScope, event);
+
+  //     if(event == "3"){//START
+  //       statePop = false;
+  //       Navigator.pop(context, "");
+  //     }
+  //     if(event == "2"){//Entrar
+  //     debugPrint("======================================== $event SAINDOO");
+  //       statePop = false;
+  //       if (focusNodes[0].hasFocus) Navigator.pop(context, str0);
+  //       if (focusNodes[1].hasFocus) Navigator.pop(context, str1);
+  //       if (focusNodes[2].hasFocus) Navigator.pop(context, str2);
+  //       if (focusNodes[3].hasFocus) Navigator.pop(context, str3);
+  //       if (focusNodes[4].hasFocus) Navigator.pop(context, str4);
+  //       if (focusNodes[5].hasFocus) Navigator.pop(context, str5);
+  //       if (focusNodes[6].hasFocus) Navigator.pop(context, str6);
+  //       statePop = true;
+  //     }
+  //   }
+    
+
+
+
+
+
+  //   btn(String str, FocusNode focus, bool iconActive, ico) {
+  //     return Padding(
+  //       padding: const EdgeInsets.all(8.0),
+  //       child: ClipRRect(
+  //         borderRadius: BorderRadius.circular(30),
+  //         child: Container(
+  //           color: Colors.black38,
+  //           height: 40,
+  //           child: MaterialButton(
+  //               focusNode: focus,
+  //               autofocus: str == str0 ? true : focus.hasFocus,
+  //               focusColor: Colors.white70,
+  //               child: Row(
+  //                 mainAxisAlignment: MainAxisAlignment.center,
+  //                 children: [
+  //                   if (iconActive) ico,
+  //                   Text(str,
+  //                       style: const TextStyle(
+  //                         fontSize: 18,
+  //                         color: Colors.white,
+  //                       )),
+  //                 ],
+  //               ),
+  //               onPressed: () => Navigator.pop(context, str)),
+  //         ),
+  //       ),
+  //     );
+  //   }
+    
+  //   await showDialog(
+  //       context: context,
+  //       builder: (_) {
+  //         return Selector<Paad, String>(
+  //           selector: (_, paad) => paad.click, // Escuta apenas click     
+  //           builder: (_, valorAtual, child) {
+  //             // WidgetsBinding.instance.addPostFrameCallback((_) {
+  //               escutaPad(valorAtual);  // Isso pode chamar o showDialog
+  //             // });
+  //             return KeyboardListener(
+  //               focusNode: FocusNode(),
+  //               onKeyEvent: (KeyEvent event) {
+  //                 if (event is KeyDownEvent) {
+  //                   // Verifica a tecla pressionada
+  //                   MovimentoSistema.direcaoListView(focusScope, event.logicalKey.keyLabel);
+  //                   if (event.logicalKey == LogicalKeyboardKey.digit3) {
+  //                     Navigator.pop(context, "");
+  //                   } else if (event.logicalKey == LogicalKeyboardKey.digit2) {
+  //                     if (focusNodes[0].hasFocus) Navigator.pop(context, str0);
+  //                     if (focusNodes[1].hasFocus) Navigator.pop(context, str1);
+  //                     if (focusNodes[2].hasFocus) Navigator.pop(context, str2);
+  //                     if (focusNodes[3].hasFocus) Navigator.pop(context, str3);
+  //                     if (focusNodes[4].hasFocus) Navigator.pop(context, str4);                      
+  //                     if (focusNodes[5].hasFocus) Navigator.pop(context, str5);                    
+  //                     if (focusNodes[6].hasFocus) Navigator.pop(context, str6);
+  //                   }
+  //                   debugPrint(event.logicalKey.toString());
+  //                 }
+  //               },
+  //               child: AlertDialog(
+                  
+  //                 backgroundColor: Colors.transparent,
+  //                 contentPadding:
+  //                     const EdgeInsets.only(left: 8, right: 8, bottom: 4),
+  //                 content: ClipRRect(
+  //                   borderRadius: BorderRadius.circular(20),
+  //                   child: Container(
+  //                     color: Colors.white.withOpacity(0.9),
+  //                     child: Container(
+  //                         // container da Tela ====================================
+  //                         color: Colors.black38,
+  //                         height: MediaQuery.of(context).size.height * 0.55,
+  //                         width: MediaQuery.of(context).size.width * 0.17,
+  //                         child: FocusScope(
+  //                           // autofocus: true,
+  //                           node: focusScope,
+  //                           child: ListView(children: [
+  //                             const SizedBox(height: 5),
+  //                             const Center(
+  //                                 child: Text(
+  //                               "Mais Opções",
+  //                               style: TextStyle(
+  //                                   color: Colors.white,
+  //                                   fontSize: 22,
+  //                                   fontWeight: FontWeight.bold),
+  //                             )),
+  //                             const SizedBox(height: 20),
+  //                             btn(str0, focusNodes[0], false, null),
+  //                             btn(str1, focusNodes[1], false, null),
+  //                             btn(str2, focusNodes[2], false, null),
+  //                             btn(str3, focusNodes[3], false, null),
+  //                             btn(str4, focusNodes[4], false, null),
+  //                             btn(str5, focusNodes[5], false, null),
+  //                             // const Spacer(),
+              
+  //                             Row(
+  //                               mainAxisAlignment: MainAxisAlignment.end,
+  //                               children: [
+  //                                 btn(
+  //                                   str6,
+  //                                   focusNodes[6],
+  //                                   true,
+  //                                   const Icon(
+  //                                     Icons.add,
+  //                                     color: Colors.white,
+  //                                   ),
+  //                                 ),
+  //                               ],
+  //                             ),
+  //                           ]),
+  //                         )),
+  //                   ),
+  //                 ),
+  //               ),
+  //             );
+  //           }
+  //         );
+  //       }).then((value) => retorno = value.toString());
+
+  //   return retorno;
+  //   }catch(e){
+  //     debugPrint(e.toString());
+  //     // Pops().msgSimples(ctx,"ERRO = 1$e");
+  //   }
+  // }
+
+ 
+
+  msgSimples(BuildContext context, String str) async{
+    return showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+              backgroundColor: Colors.transparent,
+              contentPadding: const EdgeInsets.all(0),
+              content: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                    height: 200,
+                    // decoration: decorationBOX,
+                    color: Colors.green[300],
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        SizedBox(
+                          height: 125,
+                          width: double.maxFinite,
+                          child: ListView(
+                            children: [
+                              const SizedBox(height: 15),
+                              Text(str,style: const TextStyle(fontSize: 18, color: Colors.white),softWrap: true, textAlign: TextAlign.center,),
+                            ],
+                          ),
+                        ),
+                        SizedBox(
+                          height: 70,
+                          width: 250,
+                          child: MaterialButton(
+                            onPressed: ()  =>  Navigator.pop(context,"OK"),
+                            child: const Text('OK',
+                                style: TextStyle(
+                                    fontSize: 25, color: Colors.white)),
+                          ),
+                        )
+                      ],
+                    )),
+              ),
+            ));
+  }
+
+
+  
+
+
+
+
+
+  
+  Future<String?> msgSN(BuildContext context, String str) =>
+      confirmarPad(context, str);
+
+  navPasta(BuildContext context, String caminho, String tarefa,
+      List<IconInicial> listiconIni, int index,
+      {bool futuristic = false}) async {
+    DB db = DB();
+    ui.Image? scene;
+    try{
+    if (futuristic) scene = await GlassScene.capture();
+    if (!context.mounted) return;
+    final route = DialogRoute<dynamic>(
+      context: context,
+      builder: (context) => Pops().popScren(NavPasta(
+        futuristic: futuristic,
+        scene: scene,
+      )),
+    );
+    final value = await Navigator.of(context, rootNavigator: true).push(route);
+    await route.completed;
+    if (value == null) return;
+    if (value[0] == "caminho") {
+      if(tarefa == "Caminho do game"){
+        listiconIni[index].local = value[1];
+        await db.attDados(listiconIni);
+      }
+      if(tarefa == "Imagem de capa" || tarefa == 'Caminho de Imagem'){
+        listiconIni[index].imgStr = value[1];
+        await db.attDados(listiconIni);
+      }
+      if(tarefa == "Add"){
+        List<String> campos = [];
+
+        String nome = value[1] as String;
+        nome = nome.split('\\').last;
+        nome = nome.split('.').first;
+        
+        if(value[2] != "") nome = value[2];
+
+        campos.add("item-${listiconIni.length}");        
+        campos.add("lugar: ${listiconIni.length}");        
+        campos.add("nome: $nome");        
+        campos.add("local: ${value[1]}");        
+        campos.add("img: ");        
+        campos.add("imgAux: caminho/.png");
+        IconInicial ico = IconInicial(campos);
+        // ico.local = value[1];
+
+        listiconIni.insert(0,ico);
+        await db.attDados(listiconIni);
+        return nome;
+      }
+    }
+    if (value[0] == "alterado") {
+      // saveObgrigatorio = true;
+    } else {
+      // saveObgrigatorio = false;
+    }
+    debugPrint("Finalizei navPasta dentro");
+    }catch(e){
+      debugPrint("Erro nav dentro = $e");
+    } finally {
+      scene?.dispose();
+    }
+  }
+}
+
+class _CarregandoGamesSheet extends StatefulWidget {
+  final String texto;
+
+  const _CarregandoGamesSheet({required this.texto});
+
+  @override
+  State<_CarregandoGamesSheet> createState() => _CarregandoGamesSheetState();
+}
+
+class _CarregandoGamesSheetState extends State<_CarregandoGamesSheet> {
+  final FocusNode _focusNode = FocusNode();
+  bool _fechando = false;
+  bool _minimoPassou = false;
+  Timer? _minimo;
+
+  static const tempoMinimo = Duration(seconds: 2);
+
+  @override
+  void initState() {
+    super.initState();
+    // O tempo mínimo é marcado pelo próprio Timer, e não por `DateTime.now()`:
+    // comparar relógio de parede com espera agendada dá resultados diferentes
+    // conforme quem conduz o tempo.
+    _minimo = Timer(tempoMinimo, () => _minimoPassou = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _minimo?.cancel();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  bool get _podeFechar => _minimoPassou;
+
+
+  void _tentarFechar(BuildContext context, String event) {
+    if (event != '2' && event != '3') return;
+    _fechar(context);
+  }
+
+  /// Volta ao launcher. A folha inteira é clicável — o gradiente cobre a tela
+  /// de lado a lado, então qualquer ponto dela serve de "voltar", do mesmo
+  /// jeito que A ou B no pad.
+  void _fechar(BuildContext context) {
+    if (_fechando || !_podeFechar) return;
+    _fechando = true;
+    Navigator.pop(context);
+    try {
+      Provider.of<Paad>(context, listen: false).click = '';
+      Provider.of<Paad>(context, listen: false).attTela();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<Paad, String>(
+      selector: (_, paad) => paad.click,
+      builder: (context, click, child) {
+        if (click.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _tentarFechar(context, click);
+          });
+        }
+
+        return KeyboardListener(
+          focusNode: _focusNode,
+          onKeyEvent: (event) {
+            if (event is! KeyDownEvent) return;
+            final comando =
+                MovimentoSistema.convertKeyBoard(event.logicalKey.keyLabel);
+            _tentarFechar(context, comando);
+          },
+          // Atrás do load fica só um gradiente preto, forte embaixo e sumindo
+          // para cima. A caixa arredondada com halo colorido competia com a
+          // arte do jogo que está entrando; o gradiente dá o mesmo contraste
+          // sem recortar um bloco no meio da tela.
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _fechar(context),
+            child: Container(
+              padding: const EdgeInsets.only(top: 86, bottom: 54),
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Color(0xFF000000),
+                    Color(0xF2000000),
+                    Color(0xA6000000),
+                    Color(0x40000000),
+                    Colors.transparent,
+                  ],
+                  stops: [0, .22, .5, .78, 1],
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const LoadingIco(),
+                  const SizedBox(height: 15),
+                  Text(widget.texto,
+                      style: const TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _NovoMediaCardPop extends StatefulWidget {
+  final String tipo;
+  final MediaCanal? inicial;
+
+  const _NovoMediaCardPop({required this.tipo, this.inicial});
+
+  @override
+  State<_NovoMediaCardPop> createState() => _NovoMediaCardPopState();
+}
+
+class _NovoMediaCardPopState extends State<_NovoMediaCardPop> {
+  final _nomeCtrl = TextEditingController();
+  final _urlCtrl = TextEditingController();
+  final _imgCtrl = TextEditingController();
+  Paad? _paad;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _paad ??= Provider.of<Paad>(context, listen: false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final inicial = widget.inicial;
+    if (inicial != null) {
+      _nomeCtrl.text = inicial.nome;
+      _urlCtrl.text = inicial.url;
+      _imgCtrl.text = inicial.imgLocal;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _paad?.ativaMouse(
+        usarEstado: true,
+        estado: true,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _paad?.ativaMouse(
+      usarEstado: true,
+      estado: false,
+    );
+    _nomeCtrl.dispose();
+    _urlCtrl.dispose();
+    _imgCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _buscarImagem() async {
+    final nome = _nomeCtrl.text.trim();
+    if (nome.isEmpty) return;
+    _paad?.ativaMouse(
+      usarEstado: true,
+      estado: true,
+    );
+    final result = await Pops.popTela(context, SeletorImagens(nome: nome));
+    _paad?.ativaMouse(
+      usarEstado: true,
+      estado: true,
+    );
+    if (result is String && result.isNotEmpty) {
+      final caminho = await WebScrap.downloadImage(result, nome);
+      _imgCtrl.text = caminho.contains("Erro::") ? result : caminho;
+      setState(() {});
+    }
+  }
+
+  void _salvar() {
+    final nome = _nomeCtrl.text.trim();
+    final url = _urlCtrl.text.trim();
+    final img = _imgCtrl.text.trim();
+    if (nome.isEmpty || url.isEmpty || img.isEmpty) return;
+    Navigator.pop(
+      context,
+      MediaCanal(nome: nome, url: url, imgLocal: img),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 520,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: const Color(0xF0131722),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.inicial == null
+                  ? 'Novo card de ${widget.tipo}'
+                  : 'Editar card de ${widget.tipo}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 18),
+            _campo(_nomeCtrl, 'Nome'),
+            const SizedBox(height: 12),
+            _campo(_urlCtrl, 'URL para abrir'),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _campo(_imgCtrl, 'Caminho da imagem')),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _buscarImagem,
+                    icon: const Icon(Icons.image_search),
+                    label: const Text('Buscar'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _salvar,
+                  child: const Text('Salvar'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _campo(TextEditingController controller, String label) {
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.black26,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.white24),
+        ),
+      ),
+    );
+  }
+}
+
+class _OpcoesMediaCardPop extends StatefulWidget {
+  const _OpcoesMediaCardPop();
+
+  @override
+  State<_OpcoesMediaCardPop> createState() => _OpcoesMediaCardPopState();
+}
+
+class _OpcoesMediaCardPopState extends State<_OpcoesMediaCardPop> {
+  final _focusScope = FocusScopeNode();
+  final _focusNodes = List.generate(3, (_) => FocusNode());
+  Paad? _paad;
+  String? _acaoEscolhida;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _paad ??= Provider.of<Paad>(context, listen: false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _paad?.ativaMouse(
+        usarEstado: true,
+        estado: true,
+      );
+      if (mounted) _focusNodes[0].requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_acaoEscolhida != 'editar') {
+      _paad?.ativaMouse(
+        usarEstado: true,
+        estado: false,
+      );
+    }
+    _focusScope.dispose();
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _acao(String? valor) {
+    _acaoEscolhida = valor;
+    Navigator.pop(context, valor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 360,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xF0131722),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: FocusScope(
+          node: _focusScope,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Opcoes do card',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _btn('Editar', Icons.edit, _focusNodes[0], () => _acao('editar')),
+              const SizedBox(height: 10),
+              _btn('Remover', Icons.delete_outline, _focusNodes[1],
+                  () => _acao('remover')),
+              const SizedBox(height: 10),
+              _btn('Cancelar', Icons.close, _focusNodes[2], () => _acao(null)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _btn(
+      String texto, IconData icon, FocusNode focusNode, VoidCallback onPressed) {
+    return ElevatedButton.icon(
+      focusNode: focusNode,
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(texto),
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size.fromHeight(46),
+        alignment: Alignment.centerLeft,
+      ),
+    );
+  }
+}
