@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:v1_game/Controllers/SonsSistema.dart';
 import 'package:v1_game/Controllers/slim_mode_config_controller.dart';
 import 'package:v1_game/Global.dart';
 
 import '../../Interface/launcher_pad_scope.dart';
+import '../../Interface/launcher_style_preview.dart';
 
 /// Um ajuste de uma tela, do jeito que o Pad consegue mexer nele.
 sealed class AjusteDeTela {
@@ -122,7 +124,7 @@ List<TelaDoLauncher> telasDoLauncher() => [
       ),
     ];
 
-/// Escolha e ajuste de telas, em uma grade grande.
+/// Seletor de telas com lista e painel de ajustes independentes.
 ///
 /// Devolve `'salvar'` quando algo mudou — quem chama aplica a interface —, ou
 /// vazio ao sair sem mexer.
@@ -134,20 +136,22 @@ class PopInterfaces {
   /// direto ao disco.
   static Future<String> abrir(
     BuildContext context, {
+    List<String> capas = const [],
     Future<bool> Function()? gravar,
     Future<void> Function(bool)? definirSlim,
   }) async =>
       await showDialog<String>(
         context: context,
         barrierDismissible: false,
-        builder: (_) =>
-            _PopInterfaces(gravar: gravar, definirSlim: definirSlim),
+        builder: (_) => _PopInterfaces(
+            gravar: gravar, definirSlim: definirSlim, capas: capas),
       ) ??
       '';
 }
 
 class _PopInterfaces extends StatefulWidget {
-  const _PopInterfaces({this.gravar, this.definirSlim});
+  const _PopInterfaces({this.gravar, this.definirSlim, this.capas = const []});
+  final List<String> capas;
   final Future<bool> Function()? gravar;
   final Future<void> Function(bool)? definirSlim;
 
@@ -155,134 +159,172 @@ class _PopInterfaces extends StatefulWidget {
   State<_PopInterfaces> createState() => _PopInterfacesState();
 }
 
-/// Uma parada do Pad: o cartão da tela, ou um ajuste dentro dele.
-class _Parada {
-  const _Parada(this.tela, [this.ajuste]);
-  final int tela;
-  final int? ajuste;
-  bool get ehCartao => ajuste == null;
-}
-
 class _PopInterfacesState extends State<_PopInterfaces> {
   late final List<TelaDoLauncher> _telas = telasDoLauncher();
-  late final List<_Parada> _paradas = _montarParadas();
   final _slim = const SlimModeConfigController();
-
-  Future<void> _escreverSlim(bool ativo) =>
-      widget.definirSlim?.call(ativo) ?? _slim.writeActive(ativo);
-
-  int _parada = 0;
+  final _listaScroll = ScrollController();
+  final _ajustesScroll = ScrollController();
+  final _keyboardFocus = FocusNode(debugLabel: 'navegacao de telas');
+  late final List<GlobalKey> _telaKeys;
+  late List<GlobalKey> _ajusteKeys;
+  final _aplicarKey = GlobalKey();
+  int _tela = 0;
+  int _ajuste = 0;
+  bool _editando = false;
   bool _mudou = false;
   bool _fechando = false;
-
+  int _revisaoScroll = 0;
   static const _violeta = Color(0xFFB6A8FF);
 
-  /// Cartão e, logo abaixo dele, os seus ajustes — nessa ordem, para o
-  /// direcional descer de um para o outro sem truque.
-  List<_Parada> _montarParadas() => [
-        for (var t = 0; t < _telas.length; t++) ...[
-          _Parada(t),
-          for (var a = 0; a < _telas[t].ajustes.length; a++) _Parada(t, a),
-        ],
-      ];
+  TelaDoLauncher get _selecionada => _telas[_tela];
+  bool get _noAplicar => _ajuste >= _selecionada.ajustes.length;
 
-  int get _telaAtual => _paradas[_parada].tela;
+  @override
+  void initState() {
+    super.initState();
+    final atual = _telas.indexWhere(_ehAtual);
+    _tela = atual < 0 ? 0 : atual;
+    _telaKeys = List.generate(_telas.length, (_) => GlobalKey());
+    _criarChavesDosAjustes();
+    _revelarSelecao();
+  }
+
+  void _criarChavesDosAjustes() {
+    _ajusteKeys =
+        List.generate(_selecionada.ajustes.length, (_) => GlobalKey());
+  }
+
+  @override
+  void dispose() {
+    _listaScroll.dispose();
+    _ajustesScroll.dispose();
+    _keyboardFocus.dispose();
+    super.dispose();
+  }
 
   bool _ehAtual(TelaDoLauncher tela) => tela.ehSlim
       ? SlimModeConfigController.active.value
       : !SlimModeConfigController.active.value &&
           configSistema.viewType == tela.id;
 
-  // --------------------------------------------------------------- navegação
+  Future<void> _escreverSlim(bool ativo) =>
+      widget.definirSlim?.call(ativo) ?? _slim.writeActive(ativo);
 
-  /// Índice da primeira parada de uma tela.
-  int _inicioDaTela(int tela) =>
-      _paradas.indexWhere((p) => p.tela == tela && p.ehCartao);
-
-  void _irPara(int destino) {
-    final alvo = destino.clamp(0, _paradas.length - 1);
-    if (alvo == _parada) return;
-    setState(() => _parada = alvo);
-    SonsSistema.direction();
-  }
-
-  /// Última parada de uma tela: o seu último ajuste, ou o próprio cartão.
-  int _fimDaTela(int tela) =>
-      _paradas.lastIndexWhere((p) => p.tela == tela);
-
-  /// A parada equivalente em outra tela.
-  ///
-  /// Estando no segundo ajuste e andando de lado, cai no segundo ajuste do
-  /// vizinho — e no que houver, quando o vizinho tiver menos. Voltar sempre
-  /// ao cartão fazia perder o lugar a cada passo horizontal.
-  int _paradaEquivalente(int tela, int? ajuste) {
-    if (ajuste == null) return _inicioDaTela(tela);
-    final quantos = _telas[tela].ajustes.length;
-    if (quantos == 0) return _inicioDaTela(tela);
-    return _inicioDaTela(tela) + 1 + ajuste.clamp(0, quantos - 1);
-  }
-
-  /// Esquerda e direita andam por **tela**, preservando a profundidade.
-  void _trocarDeTela(int delta) {
-    final alvo = (_telaAtual + delta).clamp(0, _telas.length - 1);
-    if (alvo == _telaAtual) return;
-    _irPara(_paradaEquivalente(alvo, _paradas[_parada].ajuste));
-  }
-
-  /// Cima e baixo percorrem **tudo** dentro da coluna: cartão, ajustes dele,
-  /// e então a tela de baixo. Subindo, entra pelo último ajuste da tela de
-  /// cima, para o caminho de volta ser o mesmo da ida.
-  void _mover(int delta) {
-    final parada = _paradas[_parada];
-    if (delta > 0) {
-      final proxima = _parada + 1;
-      if (proxima < _paradas.length && _paradas[proxima].tela == parada.tela) {
-        _irPara(proxima);
-        return;
+  void _revelarSelecao() {
+    final revisao = ++_revisaoScroll;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || revisao != _revisaoScroll) return;
+      // A acao de aplicar permanece visivel fora da area rolavel.
+      if (_editando && _noAplicar) return;
+      final key = !_editando
+          ? _telaKeys[_tela]
+          : _noAplicar
+              ? _aplicarKey
+              : _ajusteKeys[_ajuste];
+      final target = key.currentContext;
+      if (target == null) return;
+      final item = target.findRenderObject();
+      final viewport = Scrollable.maybeOf(target)?.context.findRenderObject();
+      if (item is RenderBox && viewport is RenderBox) {
+        final top = item.localToGlobal(Offset.zero, ancestor: viewport).dy;
+        if (top >= 8 && top + item.size.height <= viewport.size.height - 8) {
+          return;
+        }
       }
-      final abaixo = parada.tela + PopInterfaces.colunas;
-      if (abaixo < _telas.length) _irPara(_inicioDaTela(abaixo));
-      return;
-    }
-    if (!parada.ehCartao) {
-      _irPara(_parada - 1);
-      return;
-    }
-    final acima = parada.tela - PopInterfaces.colunas;
-    if (acima >= 0) _irPara(_fimDaTela(acima));
+      Scrollable.ensureVisible(target,
+          alignment: .25,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic);
+    });
+  }
+
+  void _selecionarTela(int index) {
+    if (_fechando) return;
+    final destino = index.clamp(0, _telas.length - 1);
+    if (destino == _tela && !_editando) return;
+    final mudouTela = destino != _tela;
+    setState(() {
+      _tela = destino;
+      _ajuste = 0;
+      _editando = false;
+      if (mudouTela) _criarChavesDosAjustes();
+    });
+    if (mudouTela && _ajustesScroll.hasClients) _ajustesScroll.jumpTo(0);
+    _keyboardFocus.requestFocus();
+    SonsSistema.direction();
+    _revelarSelecao();
+  }
+
+  void _editar(int index) {
+    if (_fechando) return;
+    final destino = index.clamp(0, _selecionada.ajustes.length);
+    if (_editando && _ajuste == destino) return;
+    setState(() {
+      _editando = true;
+      _ajuste = destino;
+    });
+    _keyboardFocus.requestFocus();
+    SonsSistema.direction();
+    _revelarSelecao();
+  }
+
+  void _voltarParaLista() {
+    setState(() => _editando = false);
+    _keyboardFocus.requestFocus();
+    SonsSistema.direction();
+    _revelarSelecao();
   }
 
   bool _comando(String comando) {
     if (_fechando) return true;
-    final parada = _paradas[_parada];
+    if (!_editando) {
+      switch (comando) {
+        case 'CIMA':
+          _selecionarTela(_tela - 1);
+        case 'BAIXO':
+          _selecionarTela(_tela + 1);
+        case 'DIREITA':
+        case '2':
+          _editar(0);
+        case 'LB':
+          _selecionarTela(_tela - 1);
+        case 'RB':
+          _selecionarTela(_tela + 1);
+        case '3':
+        case 'START':
+          _fechar();
+      }
+      return true;
+    }
     switch (comando) {
-      case 'ESQUERDA':
-        _trocarDeTela(-1);
-      case 'DIREITA':
-        _trocarDeTela(1);
       case 'CIMA':
-        _mover(-1);
+        _editar(_ajuste - 1);
       case 'BAIXO':
-        _mover(1);
+        _editar(_ajuste + 1);
+      case 'ESQUERDA':
+        _voltarParaLista();
       case 'LB':
         _mexerNoVolume(-AjusteVolume.passo);
       case 'RB':
         _mexerNoVolume(AjusteVolume.passo);
       case '2':
-        parada.ehCartao
-            ? _aplicar(_telas[parada.tela])
-            : _acionarAjuste(_telas[parada.tela].ajustes[parada.ajuste!]);
+        if (_noAplicar) {
+          _aplicar(_selecionada);
+        } else {
+          _acionarAjuste(_selecionada.ajustes[_ajuste]);
+        }
       case '3':
+        _voltarParaLista();
       case 'START':
         _fechar();
     }
     return true;
   }
 
-  // ------------------------------------------------------------------- ações
-
   void _acionarAjuste(AjusteDeTela ajuste) {
-    if (ajuste is! AjusteLiga) return;
+    if (_fechando || ajuste is! AjusteLiga) return;
     SonsSistema.click();
     setState(() {
       ajuste.gravar(!ajuste.ler());
@@ -291,274 +333,455 @@ class _PopInterfacesState extends State<_PopInterfaces> {
   }
 
   void _mexerNoVolume(double delta) {
-    final parada = _paradas[_parada];
-    if (parada.ehCartao) return;
-    final ajuste = _telas[parada.tela].ajustes[parada.ajuste!];
+    if (!_editando || _noAplicar) return;
+    final ajuste = _selecionada.ajustes[_ajuste];
     if (ajuste is! AjusteVolume) return;
     final novo = (ajuste.ler() + delta).clamp(0.0, 1.0);
     if (novo == ajuste.ler()) return;
     SonsSistema.direction();
+    _gravarVolume(ajuste, novo);
+  }
+
+  void _gravarVolume(AjusteVolume ajuste, double valor) {
+    if (_fechando) return;
     setState(() {
-      ajuste.gravar(novo);
+      ajuste.gravar(valor.clamp(0.0, 1.0));
       _mudou = true;
     });
   }
 
   Future<void> _aplicar(TelaDoLauncher tela) async {
     if (_fechando) return;
+    // Trava comandos durante a escrita para impedir duas aplicacoes simultaneas.
+    setState(() => _fechando = true);
     SonsSistema.click();
-    if (tela.ehSlim) {
-      await _escreverSlim(true);
-    } else {
-      configSistema.viewType = tela.id;
-      if (SlimModeConfigController.active.value) {
-        await _escreverSlim(false);
+    try {
+      if (tela.ehSlim) {
+        await _escreverSlim(true);
+      } else {
+        configSistema.viewType = tela.id;
+        if (SlimModeConfigController.active.value) await _escreverSlim(false);
+      }
+      _mudou = true;
+      await _salvarEFechar();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _fechando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'N\u00e3o foi poss\u00edvel salvar a tela. Tente novamente.')));
       }
     }
-    _mudou = true;
-    await _fechar();
   }
 
   Future<void> _fechar() async {
     if (_fechando || !mounted) return;
-    _fechando = true;
-    // Gravar só na saída: mexer no disco a cada toque de LB/RB seria um
-    // arquivo por passo de volume.
-    if (_mudou) await (widget.gravar?.call() ?? configSistema.save());
-    if (!mounted) return;
-    Navigator.of(context).pop(_mudou ? 'salvar' : '');
-  }
-
-  // ------------------------------------------------------------------ dicas
-
-  /// Onde o Pad está, em uma linha: tela, ou tela › ajuste.
-  String _ondeEstou() {
-    final parada = _paradas[_parada];
-    final tela = _telas[parada.tela];
-    if (parada.ehCartao) return tela.nome;
-    return '${tela.nome}  ›  ${tela.ajustes[parada.ajuste!].nome}';
-  }
-
-  /// O que A e os ombros fazem na posição atual.
-  String _oQueOsBotoesFazem() {
-    final parada = _paradas[_parada];
-    final tela = _telas[parada.tela];
-    if (parada.ehCartao) {
-      final descer = tela.ajustes.isEmpty
-          ? 'esta tela não tem ajuste próprio'
-          : '↓ abre os ${tela.ajustes.length} ajustes dela';
-      return 'A usa esta tela  ·  $descer  ·  B fecha';
+    setState(() => _fechando = true);
+    try {
+      await _salvarEFechar();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _fechando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'N\u00e3o foi poss\u00edvel salvar os ajustes. Tente novamente.')));
+      }
     }
-    final ajuste = tela.ajustes[parada.ajuste!];
-    return switch (ajuste) {
-      AjusteLiga() => 'A liga e desliga  ·  ↑↓ troca de ajuste  ·  B fecha',
-      AjusteVolume() =>
-        'LB diminui  ·  RB aumenta  ·  ↑↓ troca de ajuste  ·  B fecha',
-    };
   }
 
-  // ----------------------------------------------------------------- desenho
+  Future<void> _salvarEFechar() async {
+    if (_mudou) {
+      final salvo = await (widget.gravar?.call() ?? configSistema.save());
+      if (!salvo) throw StateError('Falha ao salvar ajustes');
+    }
+    if (mounted) Navigator.of(context).pop(_mudou ? 'salvar' : '');
+  }
+
+  String get _dica {
+    if (!_editando) {
+      return 'Cima / baixo: escolher tela   |   A / direita: editar   |   B: fechar';
+    }
+    if (_noAplicar) {
+      return 'A: aplicar esta tela   |   Esquerda / B: lista de telas';
+    }
+    final ajuste = _selecionada.ajustes[_ajuste];
+    return ajuste is AjusteVolume
+        ? 'LB / RB: diminuir / aumentar   |   Cima / baixo: ajustes   |   B: lista'
+        : 'A: ligar / desligar   |   Cima / baixo: ajustes   |   B: lista';
+  }
 
   @override
   Widget build(BuildContext context) {
     final tamanho = MediaQuery.sizeOf(context);
-    return LauncherPadScope(
-      menu: false,
-      revealFocus: false,
-      onCommand: _comando,
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        insetPadding: const EdgeInsets.all(20),
-        child: SizedBox(
-          width: (tamanho.width - 40).clamp(320.0, 1180.0),
-          height: (tamanho.height - 40).clamp(320.0, 760.0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xF00D0B14),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0x40FFFFFF)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _comando('3');
+      },
+      child: LauncherPadScope(
+        menu: false,
+        revealFocus: false,
+        onCommand: _comando,
+        child: Focus(
+          focusNode: _keyboardFocus,
+          autofocus: true,
+          onKeyEvent: (_, event) {
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space) {
+              _comando('2');
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.pageUp) {
+              _comando('LB');
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.pageDown) {
+              _comando('RB');
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: ExcludeFocus(
+              child: Dialog(
+            backgroundColor: const Color(0xFF0D101A),
+            elevation: 0,
+            insetPadding: const EdgeInsets.all(16),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              width: (tamanho.width - 32).clamp(0.0, 1440.0),
+              height: (tamanho.height - 32).clamp(0.0, 920.0),
+              child: Column(children: [
+                _cabecalho(),
+                const Divider(height: 1, color: Color(0x18FFFFFF)),
+                Expanded(child: LayoutBuilder(builder: (context, bounds) {
+                  final compact = bounds.maxWidth < 760;
+                  final larguraLista = compact
+                      ? (bounds.maxWidth * .34).clamp(120.0, 240.0)
+                      : 310.0;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: larguraLista,
+                        child: ColoredBox(
+                          color: const Color(0xFF111522),
+                          child: Scrollbar(
+                            controller: _listaScroll,
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _listaScroll,
+                              padding: const EdgeInsets.all(12),
+                              child: Column(children: [
+                                for (var i = 0; i < _telas.length; i++)
+                                  _itemTela(i, compact),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const VerticalDivider(width: 1, color: Color(0x18FFFFFF)),
+                      Expanded(child: _editor(compact)),
+                    ],
+                  );
+                })),
+                const Divider(height: 1, color: Color(0x18FFFFFF)),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  child: Row(children: [
+                    Icon(
+                        _editando ? Icons.tune_rounded : Icons.gamepad_outlined,
+                        color: _violeta,
+                        size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Text(_fechando ? 'Salvando...' : _dica,
+                            style: const TextStyle(
+                                color: Colors.white60, fontSize: 12))),
+                    if (_mudou)
+                      const Padding(
+                          padding: EdgeInsets.only(left: 12),
+                          child: Text('Ajustes alterados',
+                              style: TextStyle(
+                                  color: Color(0xFFA9EEE4), fontSize: 11))),
+                  ]),
+                ),
+              ]),
+            ),
+          )),
+        ),
+      ),
+    );
+  }
+
+  Widget _cabecalho() => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 18, 16, 18),
+        child: Row(children: [
+          const Icon(Icons.dashboard_customize_rounded,
+              color: _violeta, size: 28),
+          const SizedBox(width: 14),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                const Text('Telas',
+                    style:
+                        TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+                Text(
+                    '${_telas.length} estilos dispon\u00edveis. Escolha, ajuste e aplique.',
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 12)),
+              ])),
+          IconButton(
+              tooltip: 'Salvar e fechar',
+              onPressed: _fechando ? null : _fechar,
+              icon: const Icon(Icons.close_rounded)),
+        ]),
+      );
+
+  Widget _itemTela(int index, bool compact) {
+    final tela = _telas[index];
+    final selecionada = index == _tela;
+    final foco = selecionada && !_editando;
+    return Padding(
+      key: _telaKeys[index],
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _selecionarTela(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: EdgeInsets.all(compact ? 12 : 16),
+          decoration: BoxDecoration(
+            color: selecionada ? const Color(0xFF29243D) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: foco ? _violeta : Colors.transparent, width: 2),
+          ),
+          child: Row(children: [
+            if (!compact) ...[
+              Icon(tela.icone,
+                  color: selecionada ? _violeta : Colors.white38, size: 24),
+              const SizedBox(width: 14),
+            ],
+            Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [
-                        const Icon(Icons.dashboard_rounded,
-                            color: _violeta, size: 26),
-                        const SizedBox(width: 10),
-                        const Text('Interfaces',
-                            style: TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        Flexible(
-                          child: Text(_ondeEstou(),
-                              textAlign: TextAlign.right,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
-                        ),
-                      ]),
-                      const SizedBox(height: 6),
-                      // A dica muda com a posição: ela diz o que os botões
-                      // fazem **aqui**, não uma legenda fixa que vale para
-                      // metade dos lugares.
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(_oQueOsBotoesFazem(),
-                            style: const TextStyle(
-                                fontSize: 11, color: Color(0xFF8E88A3))),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: GridView.builder(
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: PopInterfaces.colunas,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: 1.45,
-                          ),
-                          itemCount: _telas.length,
-                          itemBuilder: (context, i) => _cartao(i),
-                        ),
-                      ),
-                    ]),
-              ),
+                  Text(tela.nome,
+                      style: TextStyle(
+                          fontSize: compact ? 13 : 16,
+                          fontWeight: FontWeight.w600,
+                          color: selecionada ? Colors.white : Colors.white60)),
+                  if (!compact) ...[
+                    const SizedBox(height: 4),
+                    Text('${tela.ajustes.length} ajustes',
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 11)),
+                  ],
+                ])),
+            if (_ehAtual(tela))
+              Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Icon(Icons.check_circle_rounded,
+                      size: compact ? 15 : 18, color: const Color(0xFFA9EEE4))),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  String _detalhesDaTela(TelaDoLauncher tela) => switch (tela.id) {
+        'list' => 'Navegue pela lista de capas com o jogo em destaque. '
+            'Ative os v\u00eddeos de fundo e as not\u00edcias nos ajustes abaixo.',
+        'moderno' => 'Capas grandes e informa\u00e7\u00f5es do jogo em uma '
+            'composi\u00e7\u00e3o ampla. A faixa de not\u00edcias pode ser personalizada.',
+        'retro' => 'Uma apresenta\u00e7\u00e3o inspirada em consoles antigos, '
+            'com navega\u00e7\u00e3o entre as capas pelo controle.',
+        'grid' => 'Veja v\u00e1rios jogos ao mesmo tempo em uma grade. '
+            'Percorra linhas e colunas para encontrar o que quer jogar.',
+        'transversal' =>
+          'Pain\u00e9is inclinados e transi\u00e7\u00f5es laterais '
+              'destacam a arte dos jogos durante a navega\u00e7\u00e3o.',
+        'futurista' => 'Vidro, reflexos e paisagem com \u00e1gua. '
+            'Personalize os volumes da m\u00fasica ambiente e do som de abertura.',
+        'slim' => 'Uma faixa compacta no rodap\u00e9 do Windows para acessar '
+            'a biblioteca mantendo a \u00e1rea de trabalho ao fundo.',
+        _ => tela.resumo,
+      };
+
+  Widget _editor(bool compact) {
+    final tela = _selecionada;
+    final aplicarSelecionado = _editando && _noAplicar;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Expanded(
+          child: Scrollbar(
+        controller: _ajustesScroll,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _ajustesScroll,
+          padding: EdgeInsets.all(compact ? 16 : 28),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Icon(tela.icone, color: _violeta, size: compact ? 28 : 36),
+              const SizedBox(width: 14),
+              Expanded(
+                  child: Text(tela.nome,
+                      style: TextStyle(
+                          fontSize: compact ? 24 : 32,
+                          fontWeight: FontWeight.w700))),
+              if (!compact && _ehAtual(tela))
+                const _Etiqueta(texto: 'Em uso', cor: Color(0xFFA9EEE4)),
+            ]),
+            const SizedBox(height: 16),
+            Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 840),
+                    child: LauncherStylePreview(
+                        style: tela.id, capas: widget.capas))),
+            const SizedBox(height: 8),
+            const Text('Pr\u00e9via ilustrativa  /  16:9',
+                style: TextStyle(color: Colors.white38, fontSize: 10)),
+            const SizedBox(height: 18),
+            Text(tela.resumo,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text(_detalhesDaTela(tela),
+                style: const TextStyle(
+                    color: Colors.white60, fontSize: 13, height: 1.6)),
+            const SizedBox(height: 24),
+            const Text('PERSONALIZAR',
+                style: TextStyle(
+                    color: Colors.white38, fontSize: 11, letterSpacing: 2)),
+            const SizedBox(height: 14),
+            if (tela.ajustes.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Pronta para usar, sem ajustes exclusivos.',
+                      style: TextStyle(color: Colors.white54, height: 1.6))),
+            for (var i = 0; i < tela.ajustes.length; i++)
+              _linhaDeAjuste(i, compact),
+          ]),
+        ),
+      )),
+      Container(
+        key: _aplicarKey,
+        padding:
+            EdgeInsets.fromLTRB(compact ? 16 : 28, 14, compact ? 16 : 28, 14),
+        decoration: const BoxDecoration(
+            color: Color(0xFF121623),
+            border: Border(top: BorderSide(color: Color(0x18FFFFFF)))),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                    color:
+                        aplicarSelecionado ? Colors.white : Colors.transparent,
+                    width: 2)),
+            child: FilledButton.icon(
+              onPressed: _fechando ? null : () => _aplicar(tela),
+              style: FilledButton.styleFrom(
+                  backgroundColor:
+                      aplicarSelecionado ? _violeta : const Color(0xFF423658),
+                  foregroundColor:
+                      aplicarSelecionado ? Colors.black : Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: compact ? 14 : 18),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13))),
+              icon: _fechando
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check_circle_outline_rounded),
+              label: Text(_fechando ? 'Salvando...' : 'Usar este estilo'),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _cartao(int indice) {
-    final tela = _telas[indice];
-    final parada = _paradas[_parada];
-    final naTela = parada.tela == indice;
-    final cartaoApontado = naTela && parada.ehCartao;
-    final atual = _ehAtual(tela);
-    return GestureDetector(
-      onTap: () {
-        _irPara(_inicioDaTela(indice));
-        _aplicar(tela);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: cartaoApontado
-              ? const Color(0xFF221C38)
-              : const Color(0xFF14121E),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-              color: cartaoApontado
-                  ? Colors.white
-                  : atual
-                      ? _violeta
-                      : const Color(0xFF2A2740),
-              width: cartaoApontado || atual ? 2 : 1),
-        ),
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Icon(tela.icone,
-                    size: 22, color: atual ? _violeta : Colors.white70),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(tela.nome,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700)),
-                ),
-                if (atual) const _Etiqueta(texto: 'Atual', cor: _violeta),
-                if (tela.ajustes.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  // Diz que há algo abaixo antes de o jogador descer às cegas.
-                  Icon(Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: cartaoApontado
-                          ? Colors.white
-                          : const Color(0xFF6B6681)),
-                ],
-              ]),
-              const SizedBox(height: 4),
-              Text(tela.resumo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 11, color: Color(0xFF8E88A3))),
-              const SizedBox(height: 10),
-              Expanded(
-                child: tela.ajustes.isEmpty
-                    // Sem ajuste próprio: dizer "OK" é mais honesto que
-                    // mostrar controles que pertencem ao launcher inteiro.
-                    ? const Align(
-                        alignment: Alignment.centerLeft,
-                        child: _Etiqueta(
-                            texto: 'OK', cor: Color(0xFF7BD88F)))
-                    : ListView(
-                        padding: EdgeInsets.zero,
-                        children: [
-                          for (var a = 0; a < tela.ajustes.length; a++)
-                            _linhaDeAjuste(tela.ajustes[a],
-                                apontada: naTela && parada.ajuste == a),
-                        ],
-                      ),
-              ),
-            ]),
-      ),
-    );
-  }
-
-  Widget _linhaDeAjuste(AjusteDeTela ajuste, {required bool apontada}) {
-    final valor = switch (ajuste) {
-      AjusteLiga() => ajuste.ler() ? 'Ligado' : 'Desligado',
-      AjusteVolume() => '${(ajuste.ler() * 100).round()}%',
-    };
-    return GestureDetector(
-      onTap: () => _acionarAjuste(ajuste),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        // Recuo à esquerda: o ajuste pertence ao cartão, e a margem é o que
-        // mostra isso sem precisar de outra moldura.
-        margin: const EdgeInsets.only(left: 10, bottom: 6),
-        padding: const EdgeInsets.fromLTRB(8, 7, 10, 7),
-        decoration: BoxDecoration(
-          color: apontada ? const Color(0xFF2E2750) : const Color(0xFF1B1830),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: apontada ? Colors.white : Colors.transparent, width: 1.5),
-        ),
-        child: Row(children: [
-          Container(
-            width: 3,
-            height: 16,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-                color: apontada ? _violeta : const Color(0xFF3A3458),
-                borderRadius: BorderRadius.circular(2)),
-          ),
-          Expanded(
-            child: Text(ajuste.nome,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12)),
-          ),
-          Text(valor,
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: _violeta)),
+          if (!compact) ...[
+            const SizedBox(height: 6),
+            Text('Aplicar ${tela.nome} e salvar os ajustes',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          ],
         ]),
+      ),
+    ]);
+  }
+
+  Widget _linhaDeAjuste(int index, bool compact) {
+    final ajuste = _selecionada.ajustes[index];
+    final apontada = _editando && _ajuste == index;
+    return Padding(
+      key: _ajusteKeys[index],
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          _editar(index);
+          if (ajuste is AjusteLiga) _acionarAjuste(ajuste);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: EdgeInsets.all(compact ? 12 : 20),
+          decoration: BoxDecoration(
+              color:
+                  apontada ? const Color(0xFF262238) : const Color(0xFF151925),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: apontada ? _violeta : Colors.transparent, width: 2)),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Expanded(
+                  child: Text(ajuste.nome,
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600))),
+              const SizedBox(width: 12),
+              if (ajuste is AjusteLiga)
+                Switch(
+                    value: ajuste.ler(),
+                    activeTrackColor: _violeta,
+                    onChanged: _fechando
+                        ? null
+                        : (_) {
+                            _editar(index);
+                            _acionarAjuste(ajuste);
+                          }),
+              if (ajuste is AjusteVolume)
+                Text('${(ajuste.ler() * 100).round()}%',
+                    style: const TextStyle(
+                        color: _violeta,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700)),
+            ]),
+            if (ajuste is AjusteVolume) ...[
+              const SizedBox(height: 10),
+              Slider(
+                  value: ajuste.ler().clamp(0.0, 1.0),
+                  divisions: 10,
+                  activeColor: _violeta,
+                  label: '${(ajuste.ler() * 100).round()}%',
+                  onChangeStart: (_) => _editar(index),
+                  onChanged: _fechando
+                      ? null
+                      : (valor) => _gravarVolume(ajuste, valor)),
+              const Text('LB diminui   /   RB aumenta',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
+            ],
+          ]),
+        ),
       ),
     );
   }

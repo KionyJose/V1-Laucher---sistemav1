@@ -1550,7 +1550,9 @@ class PrincipalCtrl with ChangeNotifier{
         case "Interfaces":{
           // Mesmo caminho do Cfg: o pop grava a configuração e quem aplica a
           // interface é o controlador, dentro da transição protegida.
-          final retorno = await PopInterfaces.abrir(ctx);
+          final retorno = await PopInterfaces.abrir(ctx,
+              capas: listIconsInicial.map((jogo) => jogo.imgStr)
+                  .where((capa) => capa.isNotEmpty).take(10).toList());
           stateTela = true;
           if (retorno == "salvar") aplicarModoInterface();
           limparClickPad();
