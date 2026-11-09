@@ -324,6 +324,13 @@ class PrincipalCtrl with ChangeNotifier{
 
   void focarCategoriaSlim({bool barra = false, bool playSound = false}) {
     if (_disposed || !telaIniciada || interfaceChanging) return;
+    if (!barra && futuristicMode && selectedIndexAbaGuias == 1 &&
+        configSistema.cinemaCatalogo && slimItemNodes.isEmpty) {
+      focusScope = focusScopeCinema;
+      focusScopeCinema.requestFocus();
+      attTela();
+      return;
+    }
     final destino = barra || slimItemNodes.isEmpty ? focusScopeAbaGuias : slimItemScope;
     if (playSound && focusScope != destino) _compactMoveSound();
     if (barra || slimItemNodes.isEmpty) {
@@ -356,6 +363,22 @@ class PrincipalCtrl with ChangeNotifier{
       return true;
     }
     final barra = focusScopeAbaGuias.hasFocus;
+    if (futuristicMode && selectedIndexAbaGuias == 1 && !barra &&
+        (event == 'LB' || event == 'RB') &&
+        (cinemaPadHandler?.call(event) ?? false)) {
+      return true;
+    }
+    if (futuristicMode && selectedIndexAbaGuias == 1 &&
+        configSistema.cinemaCatalogo && !barra &&
+        event != 'LB' && event != 'RB') {
+      if (event == '3') {
+        if (cinemaPadHandler?.call(event) ?? false) return true;
+        focarCategoriaSlim(barra: true, playSound: true);
+      } else {
+        movFilmes(event);
+      }
+      return true;
+    }
     final gradeJogos = futuristicMode &&
         cardGamesGrid &&
         selectedIndexAbaGuias == 0 &&

@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
+import '../../../Global.dart';
+import '../../Cinema/body_cinema.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter/rendering.dart';
 import '../../../Interface/futuristic_card_effect.dart';
 import '../../../Interface/futuristic_warmup.dart';
 import '../../../Interface/futuristic_card_entrance.dart';
@@ -253,6 +256,7 @@ class _BodyFuturistaState extends State<BodyFuturista> with WindowListener {
       WidgetsBinding.instance.addPostFrameCallback((_) => _agendarEntrada());
     }
     final category = ctrl.selectedIndexAbaGuias;
+    final cinema = category == 1 && configSistema.cinemaCatalogo;
     final items = List.generate(
         ctrl.slimItemNodes.length,
         (index) => switch (category) {
@@ -271,7 +275,8 @@ class _BodyFuturistaState extends State<BodyFuturista> with WindowListener {
     return LauncherPadScope(
       // Durante a cascata de entrada o Pad fica quieto: mover um card que
       // ainda está chegando deixaria a esteira e o foco fora de sincronia.
-      enabled: !ctrl.mouseBloqueado && !_launchingGame && _entradaConcluida,
+      enabled: !ctrl.mouseBloqueado && !_launchingGame &&
+          (_entradaConcluida || cinema),
       revealInitialFocus: false,
       revealFocus: false,
       onCommand: ctrl.comandoSlim,
@@ -305,7 +310,11 @@ class _BodyFuturistaState extends State<BodyFuturista> with WindowListener {
           }
           return KeyEventResult.handled;
         },
-        child: FuturisticHome(
+        child: _FuturisticPageTransition(
+          category: category,
+          apiCinema: cinema,
+          child: FuturisticHome(
+          cinema: cinema ? BodyCinema(ctrl: ctrl) : null,
           windowControls: const FuturisticWindowControls(),
           category: category,
           selected: ctrl.slimItemIndex,
@@ -316,7 +325,8 @@ class _BodyFuturistaState extends State<BodyFuturista> with WindowListener {
           itemScope: ctrl.slimItemScope,
           categoryScope: ctrl.focusScopeAbaGuias,
           enabled:
-              !ctrl.mouseBloqueado && !_launchingGame && _entradaConcluida,
+              !ctrl.mouseBloqueado && !_launchingGame &&
+                  (_entradaConcluida || cinema),
           openingGame: _openingGame,
           startEntrance: _entradaLiberada,
           onEntranceDone: _entradaTerminou,
@@ -325,10 +335,102 @@ class _BodyFuturistaState extends State<BodyFuturista> with WindowListener {
               ctrl.selecionarCategoriaSlim(index, barra: true),
           onOpen: () => ctrl.abrirItemSlim(),
           onMenu: ctrl.btnMais,
+          ),
         ),
       ),
     );
   }
+}
+
+/// Desliza as abas sem montar duas árvores com os mesmos FocusNodes.
+/// A página anterior fica como imagem durante a passagem.
+class _FuturisticPageTransition extends StatefulWidget {
+  const _FuturisticPageTransition({required this.category,
+      required this.apiCinema, required this.child});
+  final int category;
+  final bool apiCinema;
+  final Widget child;
+
+  @override
+  State<_FuturisticPageTransition> createState() =>
+      _FuturisticPageTransitionState();
+}
+
+class _FuturisticPageTransitionState extends State<_FuturisticPageTransition>
+    with SingleTickerProviderStateMixin {
+  final _boundary = GlobalKey();
+  late final _animation = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 420));
+  ui.Image? _previous;
+  double _direction = 1;
+
+  void _releaseImage() {
+    final previous = _previous;
+    _previous = null;
+    // O RawImage do quadro atual ainda pode estar usando a imagem.
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous?.dispose());
+  }
+
+  @override
+  void didUpdateWidget(_FuturisticPageTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category == widget.category) return;
+    _releaseImage();
+    _direction = widget.category > oldWidget.category ? 1 : -1;
+    if ((!oldWidget.apiCinema && !widget.apiCinema) ||
+        MediaQuery.disableAnimationsOf(context)) {
+      _animation.stop();
+      _animation.value = 1;
+      return;
+    }
+    final boundary = _boundary.currentContext?.findRenderObject();
+    if (boundary is RenderRepaintBoundary && boundary.hasSize) {
+      try {
+        var ready = true;
+        assert(() {
+          ready = !boundary.debugNeedsPaint;
+          return true;
+        }());
+        if (ready) {
+          _previous = boundary.toImageSync(
+              pixelRatio: MediaQuery.devicePixelRatioOf(context).clamp(1.0, 1.5));
+        }
+      } catch (error) {
+        debugPrint('Transição de aba: $error');
+      }
+    }
+    _animation.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _animation.dispose();
+    _releaseImage();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+    child: AnimatedBuilder(
+      animation: _animation,
+      child: RepaintBoundary(key: _boundary, child: widget.child),
+      builder: (context, child) {
+        final moving = _animation.isAnimating;
+        final progress = Curves.easeInOutCubic.transform(_animation.value);
+        return Stack(fit: StackFit.expand, children: [
+          if (moving && _previous != null)
+            FractionalTranslation(
+              translation: Offset(-_direction * progress, 0),
+              child: RawImage(image: _previous, fit: BoxFit.fill),
+            ),
+          FractionalTranslation(
+            translation: Offset(moving ? _direction * (1 - progress) : 0, 0),
+            child: child,
+          ),
+        ]);
+      },
+    ),
+  );
 }
 
 class FuturisticItem {
@@ -359,12 +461,14 @@ class FuturisticHome extends StatefulWidget {
       required this.onOpen,
       required this.onMenu,
       this.windowControls,
+      this.cinema,
       this.onEntranceDone,
       this.startEntrance = true,
       this.enabled = true,
       this.openingGame = false});
   final bool openingGame, gridMode;
   final Widget? windowControls;
+  final Widget? cinema;
   final int category, selected;
   final List<FuturisticItem> items;
   final List<FocusNode> itemNodes, categoryNodes;
@@ -525,7 +629,7 @@ class _FuturisticHomeState extends State<FuturisticHome>
       return;
     }
     _entranceStarted = true;
-    if (MediaQuery.disableAnimationsOf(context)) {
+    if (_showGameGrid || MediaQuery.disableAnimationsOf(context)) {
       _entrance.value = 1;
       widget.onEntranceDone?.call();
       return;
@@ -547,6 +651,12 @@ class _FuturisticHomeState extends State<FuturisticHome>
   @override
   void didUpdateWidget(FuturisticHome oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A grade também precisa concluir a entrada para liberar o Pad, mesmo
+    // sem usar a animação da esteira. Notifica o pai depois da reconstrução.
+    if ((!oldWidget.startEntrance && widget.startEntrance) ||
+        (oldWidget.items.isEmpty && widget.items.isNotEmpty)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startEntrance());
+    }
     if (_showGameGrid) {
       _motion.stop();
       _railPosition.value = widget.selected.toDouble();
@@ -560,11 +670,6 @@ class _FuturisticHomeState extends State<FuturisticHome>
         oldWidget.category != widget.category ||
         oldWidget.items.length != widget.items.length) {
       _reveal(categoryChanged: oldWidget.category != widget.category);
-    }
-    // A cascata espera a liberação de quem monta a tela e os primeiros cards.
-    if ((!oldWidget.startEntrance && widget.startEntrance) ||
-        (oldWidget.items.isEmpty && widget.items.isNotEmpty)) {
-      _startEntrance();
     }
   }
 
@@ -586,6 +691,35 @@ class _FuturisticHomeState extends State<FuturisticHome>
         final compact = constraints.maxWidth < 800;
         final blurBackdrop = _showGameGrid || widget.category == 3;
         final padding = compact ? 24.0 : 56.0;
+        if (widget.cinema != null) {
+          return GlassScene(
+            child: GlassBackdrop(
+              background: const ColoredBox(color: Color(0xFF090F20)),
+              child: Stack(fit: StackFit.expand, children: [
+                widget.cinema!,
+                Positioned(
+                  top: 0, left: 0, right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(padding, 22, 0, 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                        Padding(
+                          padding: EdgeInsets.only(right: padding),
+                          child: _header(compact),
+                        ),
+                        const SizedBox(height: 22),
+                        _categories(compact, const Duration(milliseconds: 220)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          );
+        }
         final height = constraints.maxHeight;
         final extent =
             (height * (height < 550 ? .23 : .32)).clamp(110.0, 245.0) + 24;
@@ -656,32 +790,7 @@ class _FuturisticHomeState extends State<FuturisticHome>
                               children: [
                                 Padding(
                                     padding: EdgeInsets.only(right: padding),
-                                    child: Row(children: [
-                                      Image.asset('assets/IconeAppV1.png',
-                                          width: 34, height: 34),
-                                      const SizedBox(width: 12),
-                                      const Text('V1',
-                                          style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 22,
-                                              fontFamily: 'Oxanium',
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: 4)),
-                                      const Spacer(),
-                                      if (!compact)
-                                        const Text('FUTURISTA',
-                                            style: TextStyle(
-                                                color: Color(0xFFB6DDDB),
-                                                fontSize: 11,
-                                                letterSpacing: 3)),
-                                      const SizedBox(width: 12),
-                                      FuturisticHeaderControls(
-                                          onMenu: widget.enabled
-                                              ? widget.onMenu
-                                              : null,
-                                          windowControls:
-                                              widget.windowControls),
-                                    ])),
+                                    child: _header(compact)),
                                 const SizedBox(height: 22),
                                 _categories(compact, duration),
                                 if (_showGameGrid) ...[
@@ -995,6 +1104,33 @@ class _FuturisticHomeState extends State<FuturisticHome>
           ),
         ]);
       });
+
+  Widget _header(bool compact) => Row(children: [
+                                      Image.asset('assets/IconeAppV1.png',
+                                          width: 34, height: 34),
+                                      const SizedBox(width: 12),
+                                      const Text('V1',
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 22,
+                                              fontFamily: 'Oxanium',
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 4)),
+                                      const Spacer(),
+                                      if (!compact)
+                                        const Text('FUTURISTA',
+                                            style: TextStyle(
+                                                color: Color(0xFFB6DDDB),
+                                                fontSize: 11,
+                                                letterSpacing: 3)),
+                                      const SizedBox(width: 12),
+                                      FuturisticHeaderControls(
+                                          onMenu: widget.enabled
+                                              ? widget.onMenu
+                                              : null,
+                                          windowControls:
+                                              widget.windowControls),
+                                    ]);
 
   Widget _categories(bool compact, Duration duration) {
     final tabWidth = compact ? 55.0 : 132.0;

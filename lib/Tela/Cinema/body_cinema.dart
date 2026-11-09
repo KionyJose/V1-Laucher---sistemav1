@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../Controllers/SonsSistema.dart';
+import '../../Interface/futuristic_material.dart';
 import '../../Modelos/MediaCanal.dart';
 import 'package:v1_game/Tela/Tela%20Principal/PrincipalCtrl.dart';
 import 'cinema_catalogo.dart';
@@ -399,7 +400,12 @@ class BodyCinemaState extends State<BodyCinema> {
       !widget.ctrl.gameIniciado;
 
   void _som(void Function() tocar) {
-    if (widget.sons) tocar();
+    if (!widget.sons) return;
+    if (widget.ctrl.futuristicMode && tocar == SonsSistema.directionAtual) {
+      SonsSistema.futuristicMove();
+    } else {
+      tocar();
+    }
   }
 
   ScrollController _controladorDa(int faixa) =>
@@ -1050,9 +1056,26 @@ class BodyCinemaState extends State<BodyCinema> {
         child: TickerMode(
           enabled: visivel,
           child: ColoredBox(
-            color: Cine.fundo,
+            color: ctrl.futuristicMode ? const Color(0xFF090F20) : Cine.fundo,
             child: Stack(fit: StackFit.expand, children: [
               _fundo(),
+              if (ctrl.futuristicMode)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0x403D295F), Color(0x18295F68),
+                            Color(0x80090F20)],
+                        ),
+                        border: Border(top: BorderSide(
+                          color: FuturisticPalette.water, width: .5)),
+                      ),
+                    ),
+                  ),
+                ),
               // A foto do canal cobre a tela inteira; a coluna vem depois na
               // pilha, e por isso fica por cima dela.
               Positioned.fill(child: _capaDoCanal()),
@@ -1065,6 +1088,8 @@ class BodyCinemaState extends State<BodyCinema> {
                   // Ela nunca sai de cena: é nela que se vê qual canal está
                   // escolhido. O que troca é o miolo da tela, ao lado.
                   TrilhoCanais(
+                    recuoTopo: TrilhoCanais.paddingTopo +
+                        (ctrl.futuristicMode ? 74 : 0),
                     canais: ctrl.listCinema,
                     focos: ctrl.focusNodeCinema,
                     selecionado: ctrl.selectedIndexCinema,
@@ -1078,7 +1103,10 @@ class BodyCinemaState extends State<BodyCinema> {
                   // O miolo é um lugar só, com dois conteúdos que se cruzam:
                   // o catálogo e a capa do canal escolhido. Nenhum dos dois
                   // aparece ou some de estalo — é sempre fusão.
-                  Expanded(child: _miolo()),
+                  Expanded(child: Padding(
+                    padding: EdgeInsets.only(top: ctrl.futuristicMode ? 74 : 0),
+                    child: _miolo(),
+                  )),
                 ]),
               ),
               _rodape(),

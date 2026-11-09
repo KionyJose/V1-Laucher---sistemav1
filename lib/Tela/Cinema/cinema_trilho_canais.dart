@@ -23,6 +23,7 @@ class TrilhoCanais extends StatelessWidget {
     required this.onApontar,
     required this.onAbrir,
     this.largura = larguraPadrao,
+    this.recuoTopo = paddingTopo,
   });
 
   /// Largura da coluna.
@@ -42,6 +43,7 @@ class TrilhoCanais extends StatelessWidget {
   final ValueChanged<int> onApontar;
   final ValueChanged<int> onAbrir;
   final double largura;
+  final double recuoTopo;
 
   static const _diametro = 54.0;
 
@@ -68,7 +70,7 @@ class TrilhoCanais extends StatelessWidget {
           // Sem rótulo: a capa de cada canal já diz o que ele é, e a
           // palavra "canais" só roubava altura da coluna.
           ListView.builder(
-            padding: const EdgeInsets.only(top: paddingTopo, bottom: 24),
+            padding: EdgeInsets.only(top: recuoTopo, bottom: 24),
             itemCount: canais.length,
             itemBuilder: (_, i) => _canal(i),
           ),
