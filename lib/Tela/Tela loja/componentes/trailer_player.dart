@@ -13,7 +13,12 @@ import '../../../Interface/launcher_pad_scope.dart';
 class TrailerPlayer extends StatefulWidget {
   final TrailerJogo trailer;
   final bool inline;
-  const TrailerPlayer({super.key, required this.trailer, this.inline = false});
+  final BoxFit fit;
+  const TrailerPlayer(
+      {super.key,
+      required this.trailer,
+      this.inline = false,
+      this.fit = BoxFit.contain});
   @override
   State<TrailerPlayer> createState() => TrailerPlayerState();
 }
@@ -130,12 +135,16 @@ class TrailerPlayerState extends State<TrailerPlayer> {
 
   Future<void> _iniciar() async {
     try {
-      final manifest = await _youtube.videos.streamsClient
-          .getManifest(widget.trailer.youtubeId)
-          .timeout(const Duration(seconds: 30));
-      if (!mounted) return;
-      if (manifest.muxed.isEmpty) {
-        throw StateError('Trailer sem stream compatível.');
+      var endereco = widget.trailer.videoDireto;
+      if (endereco == null) {
+        final manifest = await _youtube.videos.streamsClient
+            .getManifest(widget.trailer.youtubeId)
+            .timeout(const Duration(seconds: 30));
+        if (!mounted) return;
+        if (manifest.muxed.isEmpty) {
+          throw StateError('Trailer sem stream compatível.');
+        }
+        endereco = manifest.muxed.bestQuality.url;
       }
       final player = Player();
       _player = player;
@@ -147,8 +156,7 @@ class TrailerPlayerState extends State<TrailerPlayer> {
         }
       });
       await player
-          .open(Media(manifest.muxed.bestQuality.url.toString()),
-              play: !_suspended)
+          .open(Media(endereco.toString()), play: !_suspended)
           .timeout(const Duration(seconds: 20));
       if (mounted) _refresh(() => _carregando = false);
     } catch (_) {
@@ -255,7 +263,10 @@ class TrailerPlayerState extends State<TrailerPlayer> {
                   else if (_carregando)
                     const Center(child: CircularProgressIndicator())
                   else
-                    Video(controller: _video!, controls: NoVideoControls),
+                    Video(
+                        controller: _video!,
+                        controls: NoVideoControls,
+                        fit: fullscreen ? BoxFit.contain : widget.fit),
                   Positioned(
                       left: 12,
                       right: 12,
@@ -316,6 +327,6 @@ class TrailerPlayerState extends State<TrailerPlayer> {
                         child: TextButton.icon(
                             onPressed: _abrirYouTube,
                             icon: const Icon(Icons.open_in_new),
-                            label: const Text('Abrir no YouTube'))),
+                            label: const Text('Abrir no navegador'))),
                   ])))));
 }

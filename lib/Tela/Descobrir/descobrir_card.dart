@@ -34,7 +34,7 @@ class DescobrirCard extends StatelessWidget {
           child: AnimatedScale(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            scale: selecionado ? 1 : .955,
+            scale: selecionado ? 1.035 : .92,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,

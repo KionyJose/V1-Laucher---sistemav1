@@ -1,9 +1,14 @@
 class TrailerJogo {
   final String titulo;
   final String youtubeId;
-  const TrailerJogo({required this.titulo, required this.youtubeId});
-  Uri get url => Uri.https('www.youtube.com', '/watch', {'v': youtubeId});
-  Uri get miniatura => Uri.https('i.ytimg.com', '/vi/$youtubeId/hqdefault.jpg');
+  final Uri? videoDireto;
+  final Uri? capaVideo;
+  const TrailerJogo({required this.titulo, this.youtubeId = '',
+      this.videoDireto, this.capaVideo});
+  Uri get url => videoDireto ??
+      Uri.https('www.youtube.com', '/watch', {'v': youtubeId});
+  Uri get miniatura => capaVideo ??
+      Uri.https('i.ytimg.com', '/vi/$youtubeId/hqdefault.jpg');
 }
 
 class VersaoJogo {

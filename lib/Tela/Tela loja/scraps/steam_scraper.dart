@@ -283,6 +283,18 @@ class SteamDetalhesScraper implements DetalhesScraper {
     final preco = dados['is_free'] == true
         ? 'Grátis'
         : '${(dados['price_overview'] as Map?)?['final_formatted'] ?? ''}'.trim();
+    final trailers = <TrailerJogo>[];
+    for (final video in (dados['movies'] as List? ?? const [])) {
+      if (video is! Map) continue;
+      final mp4 = video['mp4'];
+      final webm = video['webm'];
+      final url = _https('${(mp4 is Map ? mp4['max'] ?? mp4['480'] : null) ??
+          (webm is Map ? webm['max'] ?? webm['480'] : null) ?? ''}');
+      final capa = _https('${video['thumbnail'] ?? dados['header_image'] ?? ''}');
+      if (url == null || capa == null) continue;
+      trailers.add(TrailerJogo(titulo: '${video['name'] ?? 'Trailer'}',
+          videoDireto: url, capaVideo: capa));
+    }
     return JogoDetalhes(
       pagina: pagina,
       nome: nome,
@@ -290,9 +302,7 @@ class SteamDetalhesScraper implements DetalhesScraper {
       capa: _https('${dados['header_image'] ?? ''}'),
       generos: List.unmodifiable(generos),
       imagens: List.unmodifiable(imagens),
-      // Os vídeos da Steam são mp4 próprios, não ids do YouTube; o player
-      // atual só toca YouTube, então a galeria fica apenas com as capturas.
-      trailers: const [],
+      trailers: List.unmodifiable(trailers),
       versoes: const [],
       preco: preco,
       urlLoja: pagina,
