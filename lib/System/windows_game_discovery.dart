@@ -21,6 +21,39 @@ String expandWindowsEnvironment(String value) =>
       return match[0]!;
     });
 
+/// Inclui instalações da Steam fora das pastas padrão do Windows.
+Future<List<String>> readWindowsSteamDirectories() async {
+  if (!Platform.isWindows) return [];
+  return Isolate.run(() {
+    final result = <String>{};
+    for (final hive in [win.HKEY_CURRENT_USER, win.HKEY_LOCAL_MACHINE]) {
+      for (final view in [
+        win.REG_SAM_FLAGS.KEY_WOW64_64KEY,
+        win.REG_SAM_FLAGS.KEY_WOW64_32KEY
+      ]) {
+        final key = calloc<IntPtr>();
+        final keyPath = r'SOFTWARE\Valve\Steam'.toNativeUtf16();
+        try {
+          if (win.RegOpenKeyEx(
+                  hive, keyPath, 0, win.REG_SAM_FLAGS.KEY_READ | view, key) !=
+              0) {
+            continue;
+          }
+          for (final field in ['SteamPath', 'InstallPath']) {
+            final value = _readString(key.value, field);
+            if (value.isNotEmpty) result.add(value);
+          }
+        } finally {
+          if (key.value != 0) win.RegCloseKey(key.value);
+          calloc.free(key);
+          calloc.free(keyPath);
+        }
+      }
+    }
+    return result.toList();
+  });
+}
+
 /// Leitura local: não abre shells, instaladores, jogos ou ferramentas de rede.
 Future<List<WindowsInstalledProgram>> readWindowsInstalledPrograms() async {
   if (!Platform.isWindows) return [];

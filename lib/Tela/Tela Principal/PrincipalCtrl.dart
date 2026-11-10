@@ -1122,7 +1122,9 @@ class PrincipalCtrl with ChangeNotifier{
     } catch (_) {}
     final opcao = await Pops.popOpcoesMediaCard(ctx);
     stateTela = true;
-    if (opcao == 'editar') {
+    if (opcao == 'adicionar') {
+      await adicionarMediaCard(tipo);
+    } else if (opcao == 'editar') {
       await editarMediaCard(tipo, index);
     } else if (opcao == 'remover') {
       try {

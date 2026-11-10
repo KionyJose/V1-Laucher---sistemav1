@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:v1_game/Modelos/IconeInicial.dart';
 
@@ -156,7 +157,7 @@ class DB{
 
   bool _isExecutavelDireto(String filePath) {
     final lower = filePath.toLowerCase();
-    return lower.endsWith('.exe') || lower.endsWith('.lnk');
+    return lower.endsWith('.exe');
   }
 
   Future<Set<int>> _pidsPorCaminhoExecutavel(String filePath) async {
@@ -201,13 +202,12 @@ class DB{
           debugPrint('Link do Steam detectado');
         }
         
-        // Usa cmd /c start para processar protocolos customizados
-        process = await Process.start(
-          'cmd',
-          ['/c', 'start', '', filePath],
-          runInShell: true,
-        );
-        processoAbertoPid = process?.pid;
+        // Entrega o URI inteiro ao Windows, preservando %3A e & da Epic.
+        if (!await launchUrl(Uri.parse(filePath), mode: LaunchMode.externalApplication)) {
+          throw ProcessException(filePath, [], 'Nenhum launcher aceitou o link do jogo');
+        }
+        process = null;
+        processoAbertoPid = null;
         processoAbertoPath = filePath;
         
         debugPrint('Deep link processado com sucesso');
@@ -215,8 +215,21 @@ class DB{
         return;
       }
       
-      // Verifica se é um arquivo .exe ou .lnk
-      if (filePath.toLowerCase().endsWith('.exe') || filePath.toLowerCase().endsWith('.lnk')) {
+      if (filePath.toLowerCase().endsWith('.lnk') || filePath.toLowerCase().endsWith('.url')) {
+        if (!await File(filePath).exists()) {
+          throw FileSystemException('Atalho do jogo não encontrado', filePath);
+        }
+        if (!await launchUrl(Uri.file(filePath, windows: Platform.isWindows),
+            mode: LaunchMode.externalApplication)) {
+          throw ProcessException(filePath, [], 'Não foi possível abrir o atalho do jogo');
+        }
+        process = null;
+        processoAbertoPid = null;
+        processoAbertoPath = filePath;
+        return;
+      }
+
+      if (filePath.toLowerCase().endsWith('.exe')) {
         debugPrint('Executável detectado: ${filePath.split('\\').last}');
         
         // Para .exe, executa sem bloquear a aplicação (modo detached).
@@ -224,7 +237,7 @@ class DB{
           filePath,
           [],
           mode: ProcessStartMode.normal,
-          workingDirectory: workingDirectory,
+          workingDirectory: workingDirectory ?? File(filePath).absolute.parent.path,
         );
         processoAbertoPid = process?.pid;
         processoAbertoPath = filePath;
@@ -244,7 +257,7 @@ class DB{
       
       // Para outros tipos, usa explorer
       debugPrint('Tipo desconhecido, usando explorer');
-      openUrl(filePath);
+      await openUrl(filePath);
       debugPrint('========================================');
 
     } on ProcessException catch (e) {
@@ -254,7 +267,7 @@ class DB{
       debugPrint('Mensagem: ${e.message}');
       debugPrint('Tentando método alternativo...');
       debugPrint('========================================');
-      openUrl(filePath);
+      await openUrl(filePath);
     } catch (e) {
       debugPrint('========================================');
       debugPrint('ERRO desconhecido: $e');
@@ -344,7 +357,7 @@ class DB{
     debugPrint('[FECHAR_APP] Referencias de processo limpas.');
   }
 
-  openUrl(String filePath){
+  Future<void> openUrl(String filePath) async {
     String str = filePath.replaceAll(r'\\', r'\');
     
     debugPrint('========================================');
@@ -352,13 +365,14 @@ class DB{
     debugPrint('Caminho processado: $str');
     
     try{
-      // Se contém protocolo, usa start ao invés de explorer
+      // Protocolos são entregues ao Windows sem interpretação de comandos.
       if (str.contains('://')) {
-        debugPrint('Usando cmd start para protocolo');
-        Process.run('cmd', ['/c', 'start', '', str], runInShell: true);
+        if (!await launchUrl(Uri.parse(str), mode: LaunchMode.externalApplication)) {
+          throw ProcessException(str, [], 'Não foi possível abrir o link');
+        }
       } else {
         debugPrint('Usando explorer para arquivo/pasta');
-        Process.run('explorer', [str]);
+        await Process.run('explorer', [str]);
       }
       debugPrint('========================================');
     } on ProcessException catch (e) {

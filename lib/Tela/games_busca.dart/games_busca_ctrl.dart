@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -12,7 +13,13 @@ class GameEntry {
   final String? thumbnailPath;
   final int priority;
 
-  GameEntry({required this.name, required this.exePath, required this.installDir, required this.platform, this.thumbnailPath, this.priority = 100});
+  GameEntry(
+      {required this.name,
+      required this.exePath,
+      required this.installDir,
+      required this.platform,
+      this.thumbnailPath,
+      this.priority = 100});
 }
 
 class GamesBuscaCtrl with ChangeNotifier {
@@ -39,6 +46,7 @@ class GamesBuscaCtrl with ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
+
   String query = '';
   bool loading = false;
   List<GameEntry> allGames = [];
@@ -128,19 +136,25 @@ class GamesBuscaCtrl with ChangeNotifier {
       ...defaultRoots.keys.where((k) => k != 'Outros' && set.contains(k)),
     ];
     if (platformsFound.isEmpty) platformsFound = ['Todos'];
-    if (selectedPlatformIndex >= platformsFound.length) selectedPlatformIndex = 0;
+    if (selectedPlatformIndex >= platformsFound.length) {
+      selectedPlatformIndex = 0;
+    }
     for (final p in platformsFound) {
       focusedIndex.putIfAbsent(p, () => 0);
     }
   }
 
   List<GameEntry> get currentList {
-    final platform = platformsFound.isNotEmpty ? platformsFound[selectedPlatformIndex] : 'Todos';
+    final platform = platformsFound.isNotEmpty
+        ? platformsFound[selectedPlatformIndex]
+        : 'Todos';
     if (platform == 'Todos') return filtered;
     return filtered.where((g) => g.platform == platform).toList();
   }
 
-  String get selectedPlatform => platformsFound.isNotEmpty ? platformsFound[selectedPlatformIndex] : 'Todos';
+  String get selectedPlatform => platformsFound.isNotEmpty
+      ? platformsFound[selectedPlatformIndex]
+      : 'Todos';
 
   void startScan() {
     // Exposed method to start scanning using internal defaultRoots
@@ -160,6 +174,11 @@ class GamesBuscaCtrl with ChangeNotifier {
     final List<GameEntry> found = [];
     debugPrint('[GAMES_BUSCA] Iniciando busca de jogos...');
 
+    // Os manifestos têm os identificadores corretos de inicialização. Eles
+    // precisam ter prioridade sobre atalhos e executáveis encontrados por nome.
+    await _scanStage('Steam', () => _buscarSteamPorManifests(found, limit));
+    await _scanStage('Epic', () => _buscarEpicPorManifests(found, limit));
+
     // 1. Buscar atalhos e executáveis na área de trabalho de todos os usuários
     try {
       final usersDir = Directory(r'C:\Users');
@@ -172,9 +191,11 @@ class GamesBuscaCtrl with ChangeNotifier {
               await for (final f in desktopDir.list(followLinks: false)) {
                 if (f is File) {
                   final ext = path.extension(f.path).toLowerCase();
-                  if (ext.isNotEmpty) {
+                  if (['.exe', '.lnk', '.url'].contains(ext)) {
                     final gameName = path.basenameWithoutExtension(f.path);
-                    final exePath = ext == '.lnk' ? await _resolverAtalho(f.path) ?? f.path : f.path;
+                    // Preserva argumentos, diretório de trabalho e protocolos
+                    // configurados no próprio atalho.
+                    final exePath = f.path;
                     if (!_jaExiste(found, gameName, exePath)) {
                       found.add(GameEntry(
                         name: gameName,
@@ -194,8 +215,6 @@ class GamesBuscaCtrl with ChangeNotifier {
       }
     } catch (_) {}
 
-    await _scanStage('Steam', () => _buscarSteamPorManifests(found, limit));
-    await _scanStage('Epic', () => _buscarEpicPorManifests(found, limit));
     await _scanStage('GOG', () => _buscarGogPorManifests(found, limit));
     await _scanStage('Registro', () => _buscarProgramasRecursos(found, limit));
     if (_disposed) return;
@@ -210,7 +229,9 @@ class GamesBuscaCtrl with ChangeNotifier {
           if (appDir is Directory) {
             final List<FileSystemEntity> exeFiles = [];
             await for (final f in appDir.list(recursive: true)) {
-              if (f is File && f.path.toLowerCase().endsWith('.exe')) exeFiles.add(f);
+              if (f is File && f.path.toLowerCase().endsWith('.exe')) {
+                exeFiles.add(f);
+              }
             }
             if (exeFiles.isNotEmpty) {
               final mainExe = exeFiles.first as File;
@@ -237,14 +258,17 @@ class GamesBuscaCtrl with ChangeNotifier {
       if (await usersDir.exists()) {
         await for (final user in usersDir.list(followLinks: false)) {
           if (user is Directory) {
-            final packagesPath = path.join(user.path, 'AppData', 'Local', 'Packages');
+            final packagesPath =
+                path.join(user.path, 'AppData', 'Local', 'Packages');
             final packagesDir = Directory(packagesPath);
             if (await packagesDir.exists()) {
               await for (final pkg in packagesDir.list(followLinks: false)) {
                 if (pkg is Directory) {
                   final List<FileSystemEntity> exeFiles = [];
                   await for (final f in pkg.list(recursive: true)) {
-                    if (f is File && f.path.toLowerCase().endsWith('.exe')) exeFiles.add(f);
+                    if (f is File && f.path.toLowerCase().endsWith('.exe')) {
+                      exeFiles.add(f);
+                    }
                   }
                   if (exeFiles.isNotEmpty) {
                     final mainExe = exeFiles.first as File;
@@ -282,7 +306,9 @@ class GamesBuscaCtrl with ChangeNotifier {
               try {
                 final List<FileSystemEntity> exeFiles = [];
                 await for (final f in ent.list(recursive: false)) {
-                  if (f is File && f.path.toLowerCase().endsWith('.exe')) exeFiles.add(f);
+                  if (f is File && f.path.toLowerCase().endsWith('.exe')) {
+                    exeFiles.add(f);
+                  }
                 }
                 final mainExe = await _melhorExecutavel(ent.path, exeFiles);
                 if (mainExe != null) {
@@ -311,7 +337,8 @@ class GamesBuscaCtrl with ChangeNotifier {
     found.sort((a, b) {
       final priority = a.priority.compareTo(b.priority);
       if (priority != 0) return priority;
-      final platform = _platformPriority(a.platform).compareTo(_platformPriority(b.platform));
+      final platform = _platformPriority(a.platform)
+          .compareTo(_platformPriority(b.platform));
       if (platform != 0) return platform;
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
@@ -328,7 +355,16 @@ class GamesBuscaCtrl with ChangeNotifier {
       final dir = Directory(dirPath);
       if (!await dir.exists()) return null;
       final candidates = [
-        'icon.png', 'icon.jpg', 'icon.jpeg', 'logo.png', 'logo.jpg', 'cover.png', 'cover.jpg', 'banner.jpg', 'boxart.png', 'boxart.jpg'
+        'icon.png',
+        'icon.jpg',
+        'icon.jpeg',
+        'logo.png',
+        'logo.jpg',
+        'cover.png',
+        'cover.jpg',
+        'banner.jpg',
+        'boxart.png',
+        'boxart.jpg'
       ];
       await for (final f in dir.list(recursive: false)) {
         if (f is File) {
@@ -340,7 +376,10 @@ class GamesBuscaCtrl with ChangeNotifier {
       await for (final f in dir.list(recursive: false)) {
         if (f is File) {
           final ext = path.extension(f.path).toLowerCase();
-          if (['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.ico'].contains(ext)) return f.path;
+          if (['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.ico']
+              .contains(ext)) {
+            return f.path;
+          }
         }
       }
     } catch (_) {}
@@ -348,7 +387,15 @@ class GamesBuscaCtrl with ChangeNotifier {
   }
 
   int _platformPriority(String platform) {
-    const order = ['Outros', 'Steam', 'Epic Games', 'GOG', 'EA', 'Microsoft Store', 'Ubisoft'];
+    const order = [
+      'Outros',
+      'Steam',
+      'Epic Games',
+      'GOG',
+      'EA',
+      'Microsoft Store',
+      'Ubisoft'
+    ];
     final i = order.indexOf(platform);
     return i < 0 ? 99 : i;
   }
@@ -356,27 +403,30 @@ class GamesBuscaCtrl with ChangeNotifier {
   bool _jaExiste(List<GameEntry> found, String name, String exePath) {
     final nome = name.toLowerCase();
     final exe = exePath.toLowerCase();
-    return found.any((e) => e.exePath.toLowerCase() == exe || e.name.toLowerCase() == nome);
+    return found.any((e) =>
+        e.exePath.toLowerCase() == exe ||
+        e.name.toLowerCase() == nome ||
+        ((e.platform == 'Steam' || e.platform == 'Epic Games') &&
+            !exePath.contains('://') &&
+            path.isWithin(e.installDir.toLowerCase(), exe)));
   }
 
-  Future<String?> _resolverAtalho(String lnkPath) async {
-    try {
-      final target = await readWindowsShortcutTarget(lnkPath);
-      if (target != null && await File(target).exists()) return target;
-    } catch (error) {
-      debugPrint('[GAMES_BUSCA] Não foi possível ler o atalho $lnkPath: $error');
-    }
-    return null;
-  }
-
-  Future<void> _buscarSteamPorManifests(List<GameEntry> found, int limit) async {
+  Future<void> _buscarSteamPorManifests(
+      List<GameEntry> found, int limit) async {
     final steamRoots = <String>{};
-    for (final root in [r'C:\Program Files (x86)\Steam', r'C:\Program Files\Steam', r'D:\SteamLibrary', r'E:\SteamLibrary']) {
+    for (final root in [
+      ...await readWindowsSteamDirectories(),
+      r'C:\Program Files (x86)\Steam',
+      r'C:\Program Files\Steam',
+      r'D:\SteamLibrary',
+      r'E:\SteamLibrary'
+    ]) {
       if (await Directory(root).exists()) steamRoots.add(root);
     }
 
     for (final root in List<String>.from(steamRoots)) {
-      final libraryFile = File(path.join(root, 'steamapps', 'libraryfolders.vdf'));
+      final libraryFile =
+          File(path.join(root, 'steamapps', 'libraryfolders.vdf'));
       if (!await libraryFile.exists()) continue;
       final content = await libraryFile.readAsString();
       for (final match in RegExp(r'"path"\s+"([^"]+)"').allMatches(content)) {
@@ -388,15 +438,28 @@ class GamesBuscaCtrl with ChangeNotifier {
       final steamApps = Directory(path.join(root, 'steamapps'));
       if (!await steamApps.exists()) continue;
       await for (final manifest in steamApps.list(followLinks: false)) {
-        if (manifest is! File || !path.basename(manifest.path).startsWith('appmanifest_')) continue;
+        if (manifest is! File ||
+            !path.basename(manifest.path).startsWith('appmanifest_')) {
+          continue;
+        }
         final content = await manifest.readAsString();
-        final name = RegExp(r'"name"\s+"([^"]+)"').firstMatch(content)?.group(1);
-        final installDir = RegExp(r'"installdir"\s+"([^"]+)"').firstMatch(content)?.group(1);
-        if (name == null || installDir == null) continue;
+        final name =
+            RegExp(r'"name"\s+"([^"]+)"').firstMatch(content)?.group(1);
+        final installDir =
+            RegExp(r'"installdir"\s+"([^"]+)"').firstMatch(content)?.group(1);
+        final appId =
+            RegExp(r'"appid"\s+"(\d+)"').firstMatch(content)?.group(1);
+        if (name == null || installDir == null || appId == null) continue;
         final dir = path.join(steamApps.path, 'common', installDir);
-        final exe = await _encontrarExecutavel(dir);
-        if (exe != null && !_jaExiste(found, name, exe)) {
-          found.add(GameEntry(name: name, exePath: exe, installDir: dir, platform: 'Steam', thumbnailPath: await _findThumbnail(dir)));
+        if (!await Directory(dir).exists()) continue;
+        final exe = 'steam://rungameid/$appId';
+        if (!_jaExiste(found, name, exe)) {
+          found.add(GameEntry(
+              name: name,
+              exePath: exe,
+              installDir: dir,
+              platform: 'Steam',
+              thumbnailPath: await _findThumbnail(dir)));
         }
         if (found.length >= limit) return;
       }
@@ -404,18 +467,54 @@ class GamesBuscaCtrl with ChangeNotifier {
   }
 
   Future<void> _buscarEpicPorManifests(List<GameEntry> found, int limit) async {
-    final dir = Directory(r'C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests');
+    final dir = Directory(path.join(
+        Platform.environment['PROGRAMDATA'] ?? r'C:\ProgramData',
+        'Epic',
+        'EpicGamesLauncher',
+        'Data',
+        'Manifests'));
     if (!await dir.exists()) return;
     await for (final file in dir.list(followLinks: false)) {
-      if (file is! File || path.extension(file.path).toLowerCase() != '.item') continue;
+      if (file is! File || path.extension(file.path).toLowerCase() != '.item') {
+        continue;
+      }
       try {
-        final content = await file.readAsString();
-        final name = RegExp(r'"DisplayName"\s*:\s*"([^"]+)"').firstMatch(content)?.group(1);
-        final install = RegExp(r'"InstallLocation"\s*:\s*"([^"]+)"').firstMatch(content)?.group(1)?.replaceAll(r'\\', r'\');
-        if (name == null || install == null) continue;
-        final exe = await _encontrarExecutavel(install);
-        if (exe != null && !_jaExiste(found, name, exe)) {
-          found.add(GameEntry(name: name, exePath: exe, installDir: install, platform: 'Epic Games', thumbnailPath: await _findThumbnail(install)));
+        final content =
+            jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+        if (content['bIsIncompleteInstall'] == true ||
+            content['bIsApplication'] == false) {
+          continue;
+        }
+        final name = content['DisplayName'] as String?;
+        final install = content['InstallLocation'] as String?;
+        final appName = content['AppName'] as String?;
+        final executable = content['LaunchExecutable'] as String?;
+        if (name == null ||
+            install == null ||
+            appName == null ||
+            appName.isEmpty ||
+            executable == null ||
+            executable.isEmpty ||
+            !await Directory(install).exists()) {
+          continue;
+        }
+        final namespace = content['CatalogNamespace'] as String?;
+        final catalogId = content['CatalogItemId'] as String?;
+        final id = namespace != null &&
+                namespace.isNotEmpty &&
+                catalogId != null &&
+                catalogId.isNotEmpty
+            ? '$namespace:$catalogId:$appName'
+            : appName;
+        final exe =
+            'com.epicgames.launcher://apps/${Uri.encodeComponent(id)}?action=launch&silent=true';
+        if (!_jaExiste(found, name, exe)) {
+          found.add(GameEntry(
+              name: name,
+              exePath: exe,
+              installDir: install,
+              platform: 'Epic Games',
+              thumbnailPath: await _findThumbnail(install)));
         }
       } catch (_) {}
       if (found.length >= limit) return;
@@ -423,7 +522,11 @@ class GamesBuscaCtrl with ChangeNotifier {
   }
 
   Future<void> _buscarGogPorManifests(List<GameEntry> found, int limit) async {
-    for (final root in [r'C:\Program Files (x86)\GOG Galaxy\Games', r'C:\Program Files\GOG Galaxy\Games', r'D:\GOG Games']) {
+    for (final root in [
+      r'C:\Program Files (x86)\GOG Galaxy\Games',
+      r'C:\Program Files\GOG Galaxy\Games',
+      r'D:\GOG Games'
+    ]) {
       final dir = Directory(root);
       if (!await dir.exists()) continue;
       await for (final ent in dir.list(followLinks: false)) {
@@ -431,25 +534,39 @@ class GamesBuscaCtrl with ChangeNotifier {
         final exe = await _encontrarExecutavel(ent.path);
         final name = path.basename(ent.path);
         if (exe != null && !_jaExiste(found, name, exe)) {
-          found.add(GameEntry(name: name, exePath: exe, installDir: ent.path, platform: 'GOG', thumbnailPath: await _findThumbnail(ent.path)));
+          found.add(GameEntry(
+              name: name,
+              exePath: exe,
+              installDir: ent.path,
+              platform: 'GOG',
+              thumbnailPath: await _findThumbnail(ent.path)));
         }
         if (found.length >= limit) return;
       }
     }
   }
 
-  Future<void> _buscarProgramasRecursos(List<GameEntry> found, int limit) async {
+  Future<void> _buscarProgramasRecursos(
+      List<GameEntry> found, int limit) async {
     try {
       final programs = await readWindowsInstalledPrograms();
       for (final program in programs) {
         if (_disposed) return;
         final name = program.name;
         final install = program.installDirectory;
-        final icon = program.icon.replaceFirst(RegExp(r',\s*-?\d+\s*$'), '')
-            .replaceAll('"', '').trim();
+        final icon = program.icon
+            .replaceFirst(RegExp(r',\s*-?\d+\s*$'), '')
+            .replaceAll('"', '')
+            .trim();
         final exe = await _resolverExePrograma(install, icon);
         if (name.isNotEmpty && exe != null && !_jaExiste(found, name, exe)) {
-          found.add(GameEntry(name: name, exePath: exe, installDir: install.isNotEmpty ? install : File(exe).parent.path, platform: 'Outros', thumbnailPath: null, priority: 20));
+          found.add(GameEntry(
+              name: name,
+              exePath: exe,
+              installDir: install.isNotEmpty ? install : File(exe).parent.path,
+              platform: 'Outros',
+              thumbnailPath: null,
+              priority: 20));
         }
         if (found.length >= limit) return;
       }
@@ -459,7 +576,9 @@ class GamesBuscaCtrl with ChangeNotifier {
   }
 
   Future<String?> _resolverExePrograma(String install, String icon) async {
-    if (icon.toLowerCase().endsWith('.exe') && await File(icon).exists()) return icon;
+    if (icon.toLowerCase().endsWith('.exe') && await File(icon).exists()) {
+      return icon;
+    }
     if (install.isNotEmpty) return _encontrarExecutavel(install);
     return null;
   }
@@ -470,15 +589,22 @@ class GamesBuscaCtrl with ChangeNotifier {
       if (!await dir.exists()) return null;
       final exeFiles = <FileSystemEntity>[];
       await for (final f in dir.list(recursive: true, followLinks: false)) {
-        if (f is File && path.extension(f.path).toLowerCase() == '.exe') exeFiles.add(f);
+        if (f is File && path.extension(f.path).toLowerCase() == '.exe') {
+          exeFiles.add(f);
+        }
       }
       return (await _melhorExecutavel(dirPath, exeFiles))?.path;
     } catch (_) {}
     return null;
   }
 
-  Future<File?> _melhorExecutavel(String dirPath, List<FileSystemEntity> exeFiles) async {
-    final candidatos = exeFiles.whereType<File>().where((f) => !_ehExecutavelSistema(path.basename(f.path).toLowerCase())).toList();
+  Future<File?> _melhorExecutavel(
+      String dirPath, List<FileSystemEntity> exeFiles) async {
+    final candidatos = exeFiles
+        .whereType<File>()
+        .where(
+            (f) => !_ehExecutavelSistema(path.basename(f.path).toLowerCase()))
+        .toList();
     if (candidatos.isEmpty) return null;
     final dirName = path.basename(dirPath).toLowerCase();
     candidatos.sort((a, b) {
@@ -486,9 +612,13 @@ class GamesBuscaCtrl with ChangeNotifier {
         final name = path.basenameWithoutExtension(f.path).toLowerCase();
         if (name == dirName) return 0;
         if (name.contains(dirName) || dirName.contains(name)) return 1;
-        if (f.path.toLowerCase().contains('${Platform.pathSeparator}binaries${Platform.pathSeparator}')) return 2;
+        if (f.path.toLowerCase().contains(
+            '${Platform.pathSeparator}binaries${Platform.pathSeparator}')) {
+          return 2;
+        }
         return 3;
       }
+
       return score(a).compareTo(score(b));
     });
     return candidatos.first;
@@ -496,7 +626,22 @@ class GamesBuscaCtrl with ChangeNotifier {
 
   bool _ehExecutavelSistema(String nomeExecutavel) {
     final nome = nomeExecutavel.toLowerCase();
-    return ['unins', 'uninst', 'uninstall', 'setup', 'install', 'update', 'updater', 'patch', 'crash', 'redist', 'vcredist', 'directx', 'easyanticheat', 'battleye'].any(nome.contains);
+    return [
+      'unins',
+      'uninst',
+      'uninstall',
+      'setup',
+      'install',
+      'update',
+      'updater',
+      'patch',
+      'crash',
+      'redist',
+      'vcredist',
+      'directx',
+      'easyanticheat',
+      'battleye'
+    ].any(nome.contains);
   }
 
   void setPlatformByIndex(int i) {
@@ -519,7 +664,9 @@ class GamesBuscaCtrl with ChangeNotifier {
 
   void prevPlatform() {
     if (platformsFound.isEmpty) return;
-    selectedPlatformIndex = (selectedPlatformIndex - 1) < 0 ? platformsFound.length - 1 : selectedPlatformIndex - 1;
+    selectedPlatformIndex = (selectedPlatformIndex - 1) < 0
+        ? platformsFound.length - 1
+        : selectedPlatformIndex - 1;
     notifyListeners();
   }
 
@@ -540,9 +687,13 @@ class GamesBuscaCtrl with ChangeNotifier {
     const cross = 6; // grid columns
     int idx = focusedForCurrent();
     if (dir == 'ESQUERDA') idx = (idx - 1) < 0 ? 0 : idx - 1;
-    if (dir == 'DIREITA') idx = (idx + 1) >= list.length ? list.length - 1 : idx + 1;
+    if (dir == 'DIREITA') {
+      idx = (idx + 1) >= list.length ? list.length - 1 : idx + 1;
+    }
     if (dir == 'CIMA') idx = (idx - cross) < 0 ? 0 : idx - cross;
-    if (dir == 'BAIXO') idx = (idx + cross) >= list.length ? list.length - 1 : idx + cross;
+    if (dir == 'BAIXO') {
+      idx = (idx + cross) >= list.length ? list.length - 1 : idx + cross;
+    }
     _setFocusedForCurrent(idx);
   }
 
@@ -561,7 +712,10 @@ class GamesBuscaCtrl with ChangeNotifier {
       prevPlatform();
       return;
     }
-    if (event == 'CIMA' || event == 'BAIXO' || event == 'ESQUERDA' || event == 'DIREITA') {
+    if (event == 'CIMA' ||
+        event == 'BAIXO' ||
+        event == 'ESQUERDA' ||
+        event == 'DIREITA') {
       moveFocus(event);
       return;
     }

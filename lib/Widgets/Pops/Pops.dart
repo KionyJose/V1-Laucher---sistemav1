@@ -692,7 +692,7 @@ class _OpcoesMediaCardPop extends StatefulWidget {
 
 class _OpcoesMediaCardPopState extends State<_OpcoesMediaCardPop> {
   final _focusScope = FocusScopeNode();
-  final _focusNodes = List.generate(3, (_) => FocusNode());
+  final _focusNodes = List.generate(4, (_) => FocusNode());
   Paad? _paad;
   String? _acaoEscolhida;
 
@@ -716,7 +716,7 @@ class _OpcoesMediaCardPopState extends State<_OpcoesMediaCardPop> {
 
   @override
   void dispose() {
-    if (_acaoEscolhida != 'editar') {
+    if (_acaoEscolhida != 'editar' && _acaoEscolhida != 'adicionar') {
       _paad?.ativaMouse(
         usarEstado: true,
         estado: false,
@@ -766,7 +766,10 @@ class _OpcoesMediaCardPopState extends State<_OpcoesMediaCardPop> {
               _btn('Remover', Icons.delete_outline, _focusNodes[1],
                   () => _acao('remover')),
               const SizedBox(height: 10),
-              _btn('Cancelar', Icons.close, _focusNodes[2], () => _acao(null)),
+              _btn('Adicionar', Icons.add, _focusNodes[2],
+                  () => _acao('adicionar')),
+              const SizedBox(height: 10),
+              _btn('Cancelar', Icons.close, _focusNodes[3], () => _acao(null)),
             ],
           ),
         ),
