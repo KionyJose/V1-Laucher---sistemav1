@@ -117,6 +117,21 @@ class PrincipalCtrl with ChangeNotifier{
   /// streaming e editando cartões sem código duplicado. Nulo com a tela
   /// antiga (`BodyIconesCinema`), que não precisa de desvio nenhum.
   bool Function(String evento)? cinemaPadHandler;
+  VoidCallback? cinemaRestaurarFoco;
+
+  void restaurarFocoCinema() {
+    if (_disposed || !stateTela || interfaceChanging || selectedIndexAbaGuias != 1) return;
+    focusScope = focusScopeCinema;
+    final restaurar = cinemaRestaurarFoco;
+    if (restaurar != null) {
+      restaurar();
+    } else if (focusNodeCinema.isNotEmpty) {
+      focusNodeCinema[selectedIndexCinema.clamp(0, focusNodeCinema.length - 1)]
+          .requestFocus();
+    } else {
+      focusScopeCinema.requestFocus();
+    }
+  }
   // Controle de popup de notícia — recebe eventos de gamepad enquanto aberto
   NoticiaGame? noticiaPopupAberta;
   VoidCallback? fecharNoticiaPopup;
@@ -324,10 +339,9 @@ class PrincipalCtrl with ChangeNotifier{
 
   void focarCategoriaSlim({bool barra = false, bool playSound = false}) {
     if (_disposed || !telaIniciada || interfaceChanging) return;
-    if (!barra && futuristicMode && selectedIndexAbaGuias == 1 &&
-        configSistema.cinemaCatalogo && slimItemNodes.isEmpty) {
-      focusScope = focusScopeCinema;
-      focusScopeCinema.requestFocus();
+    if (!barra && selectedIndexAbaGuias == 1 &&
+        cinemaRestaurarFoco != null) {
+      restaurarFocoCinema();
       attTela();
       return;
     }
@@ -1977,7 +1991,9 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
   }
 
   sairDaTelaMedia(String url, String texto)async {
-    
+      final escopoAnterior = focusScope;
+      final focoAnterior = FocusManager.instance.primaryFocus;
+      try {
       gameIniciado = true;
       stateTela = false; // Desativa eventos durante o processo
       // Liberar Tela do sistema
@@ -1993,11 +2009,29 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
       await Provider.of<Paad>(ctx, listen: false).ativaMouse(usarEstado: true,  estado: false);
       // Trava na tela novamente
       Provider.of<JanelaCtrl>(ctx, listen: false).telaPresaReverse(usarEstado: true, estado: true);
-      gameIniciado = false;
       
       // Delay antes de reativar eventos para evitar cliques duplos
       await Future.delayed(const Duration(milliseconds: 300));
-      stateTela = true;
+      } finally {
+        if (!_disposed && ctx.mounted) {
+          gameIniciado = false;
+          stateTela = true;
+          limparClickPad();
+          focusScope = escopoAnterior;
+          attTela();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_disposed || !ctx.mounted || !stateTela || interfaceChanging) return;
+            if (selectedIndexAbaGuias == 1) {
+              restaurarFocoCinema();
+            } else if (focoAnterior != null && focoAnterior.context != null &&
+                focoAnterior.canRequestFocus) {
+              focoAnterior.requestFocus();
+            } else {
+              escopoAnterior.requestFocus();
+            }
+          });
+        }
+      }
   }
 
   movAbaGuias(String event) async {
@@ -2015,7 +2049,11 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
     }
     if(selectedIndexAbaGuias == 1){
       focusScope = focusScopeCinema;
-      if(focusNodeCinema.isNotEmpty) focusNodeCinema[selectedIndexCinema].requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed && stateTela && selectedIndexAbaGuias == 1) {
+          restaurarFocoCinema();
+        }
+      });
     }
     if(selectedIndexAbaGuias == 2){
       focusScope = focusScopeMusica;
@@ -2098,9 +2136,7 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
       await moverMediaUsadaParaTopo(cine, indexUsado);
       await sairDaTelaMedia(url, "Comendo pipoca.");
       // Garantir que o foco volte para o escopo correto após abrir o arquivo
-      focusNodeCinema[selectedIndexCinema].requestFocus();
-      focusScopeCinema.requestFocus();
-      focusScope = focusScopeCinema;
+      restaurarFocoCinema();
     }
   }
 

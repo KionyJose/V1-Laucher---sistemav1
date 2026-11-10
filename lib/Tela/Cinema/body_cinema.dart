@@ -220,6 +220,8 @@ class BodyCinemaState extends State<BodyCinema> {
   int _faixa = 0;
   double? _linhaMosaico;
   int _item = 0;
+  final FocusNode _focoCatalogo = FocusNode(debugLabel: 'Cinema API');
+  final Map<String, ({int item, double? linha})> _posicoesPorFaixa = {};
 
   /// Ficha aberta; nula quando o mosaico está à mostra.
   TituloCine? _ficha;
@@ -272,6 +274,7 @@ class BodyCinemaState extends State<BodyCinema> {
     // que esta tela não consome (abrir canal, opções) segue para o fluxo
     // antigo, que continua valendo para a coluna da esquerda.
     widget.ctrl.cinemaPadHandler = comando;
+    widget.ctrl.cinemaRestaurarFoco = _restaurarFoco;
   }
 
   @override
@@ -279,6 +282,10 @@ class BodyCinemaState extends State<BodyCinema> {
     if (widget.ctrl.cinemaPadHandler == comando) {
       widget.ctrl.cinemaPadHandler = null;
     }
+    if (widget.ctrl.cinemaRestaurarFoco == _restaurarFoco) {
+      widget.ctrl.cinemaRestaurarFoco = null;
+    }
+    _focoCatalogo.dispose();
     _detalheAgendado?.cancel();
     _viradaAgendada?.cancel();
     _aberturaAgendada?.cancel();
@@ -412,6 +419,19 @@ class BodyCinemaState extends State<BodyCinema> {
       _horizontais[faixa] ??= ScrollController();
 
   // ------------------------------------------------------------- navegação
+
+  void _restaurarFoco() {
+    if (!mounted || !_visivel) return;
+    final ctrl = widget.ctrl;
+    ctrl.focusScope = ctrl.focusScopeCinema;
+    if (_zona == ZonaCine.canais && ctrl.focusNodeCinema.isNotEmpty) {
+      ctrl.focusNodeCinema[ctrl.selectedIndexCinema
+              .clamp(0, ctrl.focusNodeCinema.length - 1)]
+          .requestFocus();
+    } else {
+      _focoCatalogo.requestFocus();
+    }
+  }
 
   /// Comandos do Pad na aba de cinema.
   ///
@@ -679,10 +699,11 @@ class BodyCinemaState extends State<BodyCinema> {
       return true;
     }
     setState(() {
-      _linhaMosaico = null;
       _faixa = destino;
-      _item =
-          _item.clamp(0, (_faixas[destino].itens.length - 1).clamp(0, 9999));
+      final salva = _posicoesPorFaixa[_faixas[destino].titulo];
+      _linhaMosaico = salva?.linha;
+      _item = (salva?.item ?? 0)
+          .clamp(0, (_faixas[destino].itens.length - 1).clamp(0, 9999));
     });
     _som(SonsSistema.directionAtual);
     _revelarFaixa();
@@ -695,6 +716,7 @@ class BodyCinemaState extends State<BodyCinema> {
     if (_zona == ZonaCine.canais) {
       if (passo > 0) {
         setState(() => _zona = ZonaCine.mosaico);
+        _restaurarFoco();
         _som(SonsSistema.directionAtual);
         _revelarItem();
         _itemMudou();
@@ -745,6 +767,10 @@ class BodyCinemaState extends State<BodyCinema> {
   /// Mudou o item em foco: a ficha completa é pedida e o ciclo do cartão
   /// recomeça do zero.
   void _itemMudou() {
+    if (_zona == ZonaCine.mosaico && _faixa < _faixas.length) {
+      _posicoesPorFaixa[_faixas[_faixa].titulo] =
+          (item: _item, linha: _linhaMosaico);
+    }
     _cicloDoTitulo = _destaque?.id;
     _agendarDetalhe();
     _agendarCartao();
@@ -857,6 +883,7 @@ class BodyCinemaState extends State<BodyCinema> {
 
   void _apontarCanal(int indice) {
     final ctrl = widget.ctrl;
+    if (!_visivel || ctrl.mouseBloqueado) return;
     if (indice < 0 || indice >= ctrl.listCinema.length) return;
     // O mouse repousando sobre o canal já apontado não é movimento: sem esta
     // saída, cada quadro do hover tocaria o som de novo.
@@ -866,12 +893,14 @@ class BodyCinemaState extends State<BodyCinema> {
       ctrl.selectedIndexCinema = indice;
     });
     if (indice < ctrl.focusNodeCinema.length) {
+      ctrl.focusScope = ctrl.focusScopeCinema;
       ctrl.focusNodeCinema[indice].requestFocus();
     }
     _som(SonsSistema.directionAtual);
   }
 
   void _apontarItem(int faixa, int item) {
+    if (!_visivel || widget.ctrl.mouseBloqueado) return;
     if (_zona == ZonaCine.mosaico && _faixa == faixa && _item == item) return;
     setState(() {
       _linhaMosaico = null;
@@ -879,6 +908,7 @@ class BodyCinemaState extends State<BodyCinema> {
       _faixa = faixa;
       _item = item;
     });
+    _restaurarFoco();
     _som(SonsSistema.directionAtual);
     _itemMudou();
   }
@@ -1103,10 +1133,16 @@ class BodyCinemaState extends State<BodyCinema> {
                   // O miolo é um lugar só, com dois conteúdos que se cruzam:
                   // o catálogo e a capa do canal escolhido. Nenhum dos dois
                   // aparece ou some de estalo — é sempre fusão.
-                  Expanded(child: Padding(
-                    padding: EdgeInsets.only(top: ctrl.futuristicMode ? 74 : 0),
-                    child: _miolo(),
-                  )),
+                  Expanded(
+                    child: Focus(
+                      focusNode: _focoCatalogo,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                            top: ctrl.futuristicMode ? 74 : 0),
+                        child: _miolo(),
+                      ),
+                    ),
+                  ),
                 ]),
               ),
               _rodape(),

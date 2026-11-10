@@ -90,7 +90,9 @@ class LadrilhoCine extends StatelessWidget {
       selected: selecionado,
       label: titulo.titulo,
       child: MouseRegion(
-        onEnter: (_) => onApontar?.call(),
+        onHover: (evento) {
+          if (evento.delta != Offset.zero) onApontar?.call();
+        },
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: () {

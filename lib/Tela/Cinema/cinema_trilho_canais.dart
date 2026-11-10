@@ -86,7 +86,9 @@ class TrilhoCanais extends StatelessWidget {
       focusNode: i < focos.length ? focos[i] : null,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        onEnter: (_) => onApontar(i),
+        onHover: (evento) {
+          if (evento.delta != Offset.zero) onApontar(i);
+        },
         child: GestureDetector(
           onTap: () {
             onApontar(i);

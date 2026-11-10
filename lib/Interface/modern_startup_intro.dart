@@ -27,7 +27,7 @@ class _ModernStartupIntroState extends State<ModernStartupIntro>
     super.initState();
     _active = widget.enabled;
     _timeline =
-        AnimationController(vsync: this, duration: const Duration(seconds: 10))
+        AnimationController(vsync: this, duration: const Duration(seconds: 5))
           ..addStatusListener(_status);
     _reveal = _timeline.drive(
         CurveTween(curve: const Interval(.9, 1, curve: Curves.easeInOutCubic)));
@@ -39,7 +39,7 @@ class _ModernStartupIntroState extends State<ModernStartupIntro>
     if (!_active || _started) return;
     _started = true;
     _reduced = MediaQuery.disableAnimationsOf(context);
-    if (_reduced) _timeline.duration = const Duration(milliseconds: 700);
+    if (_reduced) _timeline.duration = const Duration(milliseconds: 350);
     _timeline.forward();
   }
 
@@ -57,7 +57,7 @@ class _ModernStartupIntroState extends State<ModernStartupIntro>
     // Continue into the final reveal instead of abruptly removing the overlay.
     _timeline.value = math.max(.9, _timeline.value);
     _timeline.animateTo(1,
-        duration: Duration(milliseconds: _reduced ? 100 : 650));
+        duration: Duration(milliseconds: _reduced ? 50 : 325));
   }
 
   @override

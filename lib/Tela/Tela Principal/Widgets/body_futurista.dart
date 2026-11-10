@@ -604,6 +604,7 @@ class _FuturisticHomeState extends State<FuturisticHome>
   }
 
   void _acknowledge(int revision) {
+    if (widget.cinema != null) return;
     if (!widget.itemScope.hasFocus || widget.itemNodes.isEmpty) return;
     widget.itemNodes[widget.selected.clamp(0, widget.itemNodes.length - 1)]
         .requestFocus();
@@ -710,8 +711,6 @@ class _FuturisticHomeState extends State<FuturisticHome>
                           padding: EdgeInsets.only(right: padding),
                           child: _header(compact),
                         ),
-                        const SizedBox(height: 22),
-                        _categories(compact, const Duration(milliseconds: 220)),
                       ]),
                     ),
                   ),
@@ -1106,18 +1105,28 @@ class _FuturisticHomeState extends State<FuturisticHome>
       });
 
   Widget _header(bool compact) => Row(children: [
+                                      if (widget.cinema != null)
+                                        FocusScope(
+                                          node: widget.categoryScope,
+                                          child: Focus(
+                                            focusNode: widget.categoryNodes[widget.category],
+                                            child: Image.asset('assets/IconeAppV1.png',
+                                                width: 34, height: 34),
+                                          ),
+                                        )
+                                      else
                                       Image.asset('assets/IconeAppV1.png',
                                           width: 34, height: 34),
                                       const SizedBox(width: 12),
-                                      const Text('V1',
-                                          style: TextStyle(
+                                      Text(widget.cinema != null ? 'Cinema' : 'V1',
+                                          style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 22,
                                               fontFamily: 'Oxanium',
                                               fontWeight: FontWeight.w600,
                                               letterSpacing: 4)),
                                       const Spacer(),
-                                      if (!compact)
+                                      if (!compact && widget.cinema == null)
                                         const Text('FUTURISTA',
                                             style: TextStyle(
                                                 color: Color(0xFFB6DDDB),

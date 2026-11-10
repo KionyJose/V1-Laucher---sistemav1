@@ -306,58 +306,42 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
       )),
       SafeArea(
           child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 70, 28, 16),
-        child: LayoutBuilder(builder: (context, bounds) {
-          final wide = bounds.maxWidth >= 1000;
-          final short = bounds.maxHeight < 480;
-          final gallery = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                IconButton(
-                  tooltip: 'Voltar ao Descobrir',
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-                const Icon(Icons.photo_library_outlined,
-                    size: 17, color: _violeta),
-                const SizedBox(width: 10),
-                const Text('GALERIA',
-                    style: TextStyle(
-                        color: Colors.white70, fontSize: 11, letterSpacing: 3)),
-                const Spacer(),
-                Text(
-                    midias.isEmpty
-                        ? 'SEM M\u00cdDIA'
-                        : '${_midia + 1} / ${midias.length}',
-                    style:
-                        const TextStyle(color: Colors.white54, fontSize: 12)),
-              ]),
-              const SizedBox(height: 4),
-              Expanded(child: _imagemGrandeWidget(midias)),
-              if (midias.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                SizedBox(
-                    height: short ? 64 : 90, child: _faixaDeMidias(midias)),
-              ],
-            ],
-          );
-          final info = _painelInformacoes(context, jogo, short: short);
-          if (wide) {
-            return Row(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 70),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1600),
+            child: LayoutBuilder(builder: (context, bounds) {
+              final wide = bounds.maxWidth >= 1000;
+              final short = bounds.maxHeight < 480;
+              final gallery = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: gallery),
-                  const SizedBox(width: 28),
-                  SizedBox(width: 320, child: info),
-                ]);
-          }
-          return Column(children: [
-            Expanded(flex: 5, child: gallery),
-            const SizedBox(height: 14),
-            Expanded(flex: 3, child: info),
-          ]);
-        }),
+                  Expanded(child: _imagemGrandeWidget(midias)),
+                  if (midias.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    SizedBox(
+                        height: short ? 64 : 90, child: _faixaDeMidias(midias)),
+                  ],
+                ],
+              );
+              final info = _painelInformacoes(context, jogo, short: short);
+              if (wide) {
+                return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: gallery),
+                      const SizedBox(width: 28),
+                      SizedBox(width: 320, child: info),
+                    ]);
+              }
+              return Column(children: [
+                Expanded(flex: 5, child: gallery),
+                const SizedBox(height: 14),
+                Expanded(flex: 3, child: info),
+              ]);
+            }),
+          ),
+        ),
       )),
     ]);
   }
@@ -373,10 +357,12 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('EM DESTAQUE NA STEAM',
+              textAlign: TextAlign.center,
               style: TextStyle(
                   color: Color(0xFFA9EEE4), fontSize: 10, letterSpacing: 2)),
           const SizedBox(height: 10),
           Text(jogo.nome,
+              textAlign: TextAlign.center,
               maxLines: short ? 1 : 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -387,6 +373,7 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
           if (!short && jogo.generos.isNotEmpty) ...[
             const SizedBox(height: 14),
             Text(jogo.generos.take(4).join('  \u00b7  '),
+                textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -400,6 +387,7 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
           const SizedBox(height: 14),
           if (jogo.preco.isNotEmpty) ...[
             Text(jogo.preco,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -574,18 +562,40 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
         Positioned(
             top: 12,
             right: 12,
-            child: IconButton.filledTonal(
-              tooltip:
-                  atual.ehVideo ? 'Ampliar trailer (R3)' : 'Ampliar imagem (A)',
-              onPressed: () {
-                if (atual.ehVideo) {
-                  _playerKey.currentState?.command('R3');
-                } else {
-                  _ampliarImagem(midias);
-                }
-              },
-              icon: const Icon(Icons.fullscreen_rounded),
-            )),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('${_midia + 1} / ${midias.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    shadows: [
+                      Shadow(
+                          color: Colors.black54,
+                          blurRadius: 4,
+                          offset: Offset(0, 1)),
+                    ],
+                  )),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: atual.ehVideo
+                    ? 'Ampliar trailer (R3)'
+                    : 'Ampliar imagem (A)',
+                onPressed: () {
+                  if (atual.ehVideo) {
+                    _playerKey.currentState?.command('R3');
+                  } else {
+                    _ampliarImagem(midias);
+                  }
+                },
+                icon: const Icon(Icons.fullscreen_rounded,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(
+                          color: Colors.black54,
+                          blurRadius: 4,
+                          offset: Offset(0, 1)),
+                    ]),
+              ),
+            ])),
     ]);
   }
 
@@ -645,6 +655,7 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
         child: SingleChildScrollView(
           controller: _rolagemDescricao,
           child: Text(jogo.descricao,
+              textAlign: TextAlign.justify,
               style: const TextStyle(
                   height: 1.65, fontSize: 13, color: Colors.white70)),
         ),

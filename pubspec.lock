@@ -555,7 +555,7 @@ packages:
   loja_feature:
     dependency: "direct main"
     description:
-      path: "packages/loja_feature_stub"
+      path: "../loja_privada"
       relative: true
     source: path
     version: "0.0.1"
