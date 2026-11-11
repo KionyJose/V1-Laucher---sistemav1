@@ -48,6 +48,10 @@ class DB{
       listaInLine += "local: ${ico.local}\n";
       listaInLine += "img: ${ico.imgStr}\n";
       listaInLine += "imgAux: ${ico.imgAuxStr}\n";      
+      if (ico.arguments.isNotEmpty) listaInLine += 'argumentos: ${jsonEncode(ico.arguments)}\n';
+      if (ico.workingDirectory?.isNotEmpty == true) {
+        listaInLine += 'diretorioTrabalho: ${ico.workingDirectory}\n';
+      }
 
       index++;
 
@@ -185,8 +189,31 @@ class DB{
     }
   }
 
-  openFile(String filePath, {String? workingDirectory, bool throwOnError = false}) async {
+  openFile(String filePath, {String? workingDirectory, bool throwOnError = false}) =>
+      _openFileWithArguments(filePath, workingDirectory: workingDirectory,
+          throwOnError: throwOnError);
+
+  Future<void> openGameFile(String filePath, {String? workingDirectory,
+    bool throwOnError = false, List<String> arguments = const []}) async {
+    if (arguments.isEmpty) {
+      await openFile(filePath, workingDirectory: workingDirectory, throwOnError: throwOnError);
+    } else {
+      await _openFileWithArguments(filePath, workingDirectory: workingDirectory,
+          throwOnError: throwOnError, arguments: arguments);
+    }
+  }
+
+  _openFileWithArguments(String filePath, {String? workingDirectory,
+    bool throwOnError = false, List<String> arguments = const []}) async {
     try {
+      if (filePath.startsWith('shell:') || filePath.startsWith('::{')) {
+        await Process.start('explorer.exe', [filePath],
+            mode: ProcessStartMode.detached);
+        process = null;
+        processoAbertoPid = null;
+        processoAbertoPath = filePath;
+        return;
+      }
       final pidsAntes = await _pidsPorCaminhoExecutavel(filePath);
       debugPrint('========================================');
       debugPrint('ABRINDO ARQUIVO/JOGO');
@@ -235,7 +262,7 @@ class DB{
         // Para .exe, executa sem bloquear a aplicação (modo detached).
         process = await Process.start(
           filePath,
-          [],
+          arguments,
           mode: ProcessStartMode.normal,
           workingDirectory: workingDirectory ?? File(filePath).absolute.parent.path,
         );

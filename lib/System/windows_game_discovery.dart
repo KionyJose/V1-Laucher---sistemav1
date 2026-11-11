@@ -5,10 +5,14 @@ import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart' as win;
 
 class WindowsInstalledProgram {
-  const WindowsInstalledProgram(this.name, this.installDirectory, this.icon);
+  const WindowsInstalledProgram(this.name, this.installDirectory, this.icon,
+      {this.registryKey = '', this.publisher = '', this.uninstallCommand = ''});
   final String name;
   final String installDirectory;
   final String icon;
+  final String registryKey;
+  final String publisher;
+  final String uninstallCommand;
 }
 
 String expandWindowsEnvironment(String value) =>
@@ -20,6 +24,84 @@ String expandWindowsEnvironment(String value) =>
       }
       return match[0]!;
     });
+
+Future<List<String>> readWindowsGameDrives() async {
+  if (!Platform.isWindows) return [];
+  return Isolate.run(() {
+    final result = <String>[];
+    final drives = win.GetLogicalDrives();
+    for (var i = 0; i < 26; i++) {
+      if ((drives & (1 << i)) == 0) continue;
+      final root = '${String.fromCharCode(65 + i)}:\\';
+      final nativeRoot = root.toNativeUtf16();
+      try {
+        final type = win.GetDriveType(nativeRoot);
+        if (type == 2 || type == 3) {
+          result.add(root); // Removível ou disco local.
+        }
+      } finally {
+        calloc.free(nativeRoot);
+      }
+    }
+    return result;
+  });
+}
+
+Future<Map<String, String>> readWindowsExecutableDescriptions(
+    List<String> files) async {
+  if (!Platform.isWindows) return {};
+  return Isolate.run(() {
+    final results = <String, String>{};
+    for (final file in files) {
+      final filename = file.toNativeUtf16();
+      final handle = calloc<Uint32>();
+      Pointer<Uint8>? data;
+      final value = calloc<Pointer>();
+      final length = calloc<Uint32>();
+      try {
+        final size = win.GetFileVersionInfoSize(filename, handle);
+        if (size == 0 || size > 16 * 1024 * 1024) continue;
+        data = calloc<Uint8>(size);
+        if (win.GetFileVersionInfo(filename, 0, size, data) == 0) continue;
+        final translation = r'\VarFileInfo\Translation'.toNativeUtf16();
+        var language = '040904b0';
+        try {
+          if (win.VerQueryValue(data, translation, value, length) != 0 &&
+              length.value >= 4) {
+            final pair = value.value.cast<Uint16>();
+            language =
+                '${pair[0].toRadixString(16).padLeft(4, '0')}${pair[1].toRadixString(16).padLeft(4, '0')}';
+          }
+        } finally {
+          calloc.free(translation);
+        }
+        for (final field in ['FileDescription', 'ProductName']) {
+          final query = '\\StringFileInfo\\$language\\$field'.toNativeUtf16();
+          try {
+            if (win.VerQueryValue(data, query, value, length) != 0 &&
+                length.value > 0 &&
+                length.value < 8192) {
+              final text = value.value.cast<Utf16>().toDartString().trim();
+              if (text.isNotEmpty) {
+                results[file] = text;
+                break;
+              }
+            }
+          } finally {
+            calloc.free(query);
+          }
+        }
+      } finally {
+        if (data != null) calloc.free(data);
+        calloc.free(filename);
+        calloc.free(handle);
+        calloc.free(value);
+        calloc.free(length);
+      }
+    }
+    return results;
+  });
+}
 
 /// Inclui instalações da Steam fora das pastas padrão do Windows.
 Future<List<String>> readWindowsSteamDirectories() async {
@@ -95,7 +177,11 @@ List<WindowsInstalledProgram> _readInstalledPrograms() {
             final install = _readString(subkey.value, 'InstallLocation');
             final icon = _readString(subkey.value, 'DisplayIcon');
             if (name.isNotEmpty && (install.isNotEmpty || icon.isNotEmpty)) {
-              result.add(WindowsInstalledProgram(name, install, icon));
+              result.add(WindowsInstalledProgram(name, install, icon,
+                  registryKey: nameBuffer.toDartString(),
+                  publisher: _readString(subkey.value, 'Publisher'),
+                  uninstallCommand:
+                      _readString(subkey.value, 'UninstallString')));
             }
           } finally {
             if (subkey.value != 0) win.RegCloseKey(subkey.value);
@@ -146,10 +232,25 @@ String _readString(int key, String name) {
 /// Obtém somente o destino bruto do .lnk. Não chama Resolve ou ShellExecute.
 Future<String?> readWindowsShortcutTarget(String file) async {
   if (!Platform.isWindows) return null;
+  return Isolate.run(() {
+    final target = _readShortcut(file)?.target;
+    return target == null || target.isEmpty ? null : target;
+  });
+}
+
+class WindowsShortcutDetails {
+  const WindowsShortcutDetails(this.target, this.icon, this.iconIndex);
+  final String target;
+  final String icon;
+  final int iconIndex;
+}
+
+Future<WindowsShortcutDetails?> readWindowsShortcutDetails(String file) async {
+  if (!Platform.isWindows) return null;
   return Isolate.run(() => _readShortcut(file));
 }
 
-String? _readShortcut(String file) {
+WindowsShortcutDetails? _readShortcut(String file) {
   final initialized =
       win.CoInitializeEx(nullptr, win.COINIT.COINIT_APARTMENTTHREADED);
   if (win.FAILED(initialized) && initialized != win.RPC_E_CHANGED_MODE) {
@@ -160,17 +261,19 @@ String? _readShortcut(String file) {
   final filename = file.toNativeUtf16();
   final target = calloc<Uint16>(32768).cast<Utf16>();
   final info = calloc<win.WIN32_FIND_DATA>();
+  final icon = calloc<Uint16>(32768).cast<Utf16>();
+  final iconIndex = calloc<Int32>();
   try {
     link = win.ShellLink.createInstance();
     persisted = win.IPersistFile.from(link);
     if (win.FAILED(persisted.load(filename, win.STGM.STGM_READ))) return null;
     const rawPath =
         0x4; // SLGP_RAWPATH, ShObjIdl_core.h (ausente no win32 5.5.4).
-    if (win.FAILED(link.getPath(target, 32768, info, rawPath))) {
-      return null;
-    }
+    link.getPath(target, 32768, info, rawPath);
+    link.getIconLocation(icon, 32768, iconIndex);
     final path = expandWindowsEnvironment(target.toDartString()).trim();
-    return path.isEmpty ? null : path;
+    return WindowsShortcutDetails(path,
+        expandWindowsEnvironment(icon.toDartString()).trim(), iconIndex.value);
   } finally {
     if (persisted != null) {
       persisted.detach();
@@ -185,6 +288,8 @@ String? _readShortcut(String file) {
     calloc.free(filename);
     calloc.free(target);
     calloc.free(info);
+    calloc.free(icon);
+    calloc.free(iconIndex);
     if (!win.FAILED(initialized)) win.CoUninitialize();
   }
 }

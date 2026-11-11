@@ -2,6 +2,7 @@ import '../../Class/game_video_tags.dart';
 // ignore_for_file: file_names, use_build_context_synchronously
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:carousel_slider/carousel_slider.dart';
@@ -18,6 +19,7 @@ import 'package:v1_game/Controllers/NavWebCtrl.dart';
 import 'package:v1_game/Controllers/SonsSistema.dart';
 import 'package:v1_game/Global.dart';
 import 'package:v1_game/Modelos/MediaCanal.dart';
+import 'package:v1_game/Modelos/JogoBuscado.dart';
 import 'package:v1_game/Modelos/NoticiaGame.dart';
 import 'package:v1_game/Modelos/videoYT.dart';
 import 'package:v1_game/Tela/games_busca.dart/games_busca_tela.dart';
@@ -1312,7 +1314,8 @@ class PrincipalCtrl with ChangeNotifier{
       if (restante > Duration.zero) await Future.delayed(restante);
 
       // 3. Só então o jogo sobe.
-      await db.openFile(jogo.local, throwOnError: reportErrors);
+      await db.openGameFile(jogo.local, throwOnError: reportErrors,
+          arguments: jogo.arguments, workingDirectory: jogo.workingDirectory);
 
       // 4. E aqui a espera é do jogador: a folha (ou a tela futurista) só sai
       //    quando ele mandar sair. O launcher fica parado atrás do jogo até
@@ -1619,6 +1622,12 @@ class PrincipalCtrl with ChangeNotifier{
           campos.add("local: $caminhoExe");        
           campos.add("img: ");        
           campos.add("imgAux: caminho/.png");
+          if (retorno is JogoBuscado) {
+            if (retorno.arguments.isNotEmpty) campos.add('argumentos: ${jsonEncode(retorno.arguments)}');
+            if (retorno.workingDirectory?.isNotEmpty == true) {
+              campos.add('diretorioTrabalho: ${retorno.workingDirectory}');
+            }
+          }
           IconInicial ico = IconInicial(campos);
 
           listIconsInicial.insert(0,ico);
