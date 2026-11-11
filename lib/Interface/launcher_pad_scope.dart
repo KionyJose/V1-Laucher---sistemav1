@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../Class/Paad.dart';
+import '../Controllers/SonsSistema.dart';
 import 'launcher_menu.dart';
+import 'launcher_routes.dart';
 import 'pad_direction_intent.dart';
 import 'pad_scroll_target.dart';
 
@@ -126,9 +128,22 @@ class _LauncherPadScopeState extends State<LauncherPadScope> {
   }
 
   void _command(String command) {
-    if (!mounted ||
-        !widget.enabled ||
-        (widget.onCommand?.call(command) ?? false)) {
+    if (!mounted || !widget.enabled) return;
+    final direction = const {
+      'CIMA': TraversalDirection.up,
+      'BAIXO': TraversalDirection.down,
+      'ESQUERDA': TraversalDirection.left,
+      'DIREITA': TraversalDirection.right,
+    }[command];
+    final sonsNavegacao = LauncherNavigationSounds.enabledOf(context);
+    if (widget.onCommand?.call(command) ?? false) {
+      if (sonsNavegacao) {
+        if (direction != null || command == 'LB' || command == 'RB') {
+          SonsSistema.directionPadrao();
+        } else if (command == '2') {
+          SonsSistema.clickPadrao();
+        }
+      }
       return;
     }
     if (command == 'START') {
@@ -148,21 +163,19 @@ class _LauncherPadScopeState extends State<LauncherPadScope> {
     final focusContext = focus?.context;
     if (focusContext == null) return;
     if (command == '2') {
+      if (sonsNavegacao && Actions.maybeFind<ActivateIntent>(focusContext) != null) {
+        SonsSistema.clickPadrao();
+      }
       Actions.maybeInvoke(focusContext, const ActivateIntent());
       return;
     }
-    final direction = const {
-      'CIMA': TraversalDirection.up,
-      'BAIXO': TraversalDirection.down,
-      'ESQUERDA': TraversalDirection.left,
-      'DIREITA': TraversalDirection.right,
-    }[command];
     if (direction != null) {
       final intent = PadDirectionIntent(direction);
       final action = Actions.maybeFind<PadDirectionIntent>(focusContext);
-      if (action == null || Actions.invoke(focusContext, intent) != true) {
-        FocusScope.of(focusContext).focusInDirection(direction);
-      }
+      final moved =
+          (action != null && Actions.invoke(focusContext, intent) == true) ||
+              FocusScope.of(focusContext).focusInDirection(direction);
+      if (sonsNavegacao && moved) SonsSistema.directionPadrao();
     }
   }
 

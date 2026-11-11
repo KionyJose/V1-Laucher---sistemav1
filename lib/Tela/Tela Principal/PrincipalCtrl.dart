@@ -917,12 +917,25 @@ class PrincipalCtrl with ChangeNotifier{
       }
       return;
     }
-    if (selectedIndexIcone == index) return;
-    if(cardGamesGrid){
-      
-      selectedIndexIcone = index; 
-      return attTela();
+    if (cardGamesGrid) {
+      if (selectedIndexAbaGuias != 0 ||
+          index < 0 ||
+          index >= listIconsInicial.length) {
+        return;
+      }
+      if (selectedIndexIcone == index &&
+          imgFundoStr == listIconsInicial[index].imgStr &&
+          showNewImage &&
+          !showBgVideo) {
+        return;
+      }
+      selectedIndexIcone = index;
+      timerLoadVideos?.cancel();
+      _fundoCardVersao++;
+      aplicarFundoImagem(index);
+      return;
     }
+    if (selectedIndexIcone == index) return;
     try{    
       await imersaoRestart();
       if(_disposed || interfaceChanging || compactNavigation || revision != interfaceRevision) return;
@@ -2162,7 +2175,8 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
       if (lojaAtual.descobrir) {
         await abrirTelaInterna(const DescobrirTela());
       } else if (lojaAtual.interna) {
-        await abrirTelaInterna(buildLojaScreen());
+        await abrirTelaInterna(
+            LauncherNavigationSounds(child: buildLojaScreen()));
       } else {
         await sairDaTelaMedia(lojaAtual.url, "Abrindo ${lojaAtual.nome}.");
       }

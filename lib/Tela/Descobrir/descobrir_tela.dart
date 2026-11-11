@@ -113,7 +113,7 @@ class _DescobrirTelaState extends State<DescobrirTela> {
       _faixa = _Faixa.grade;
     });
     _gradeFocus.requestFocus();
-    _som(SonsSistema.futuristicMove);
+    _som(SonsSistema.directionPadrao);
     _revelarLinha(alvo ~/ DescobrirTela.colunas);
     // Pede a próxima página uma linha antes do fim, para a grade não parar
     // debaixo do dedo de quem está descendo.
@@ -150,13 +150,13 @@ class _DescobrirTelaState extends State<DescobrirTela> {
       _faixa = _Faixa.generos;
     });
     _generosFocus.requestFocus();
-    _som(SonsSistema.futuristicMove);
+    _som(SonsSistema.directionPadrao);
   }
 
   void _irParaBusca() {
     setState(() => _faixa = _Faixa.busca);
     _buscaFocus.requestFocus();
-    _som(SonsSistema.futuristicMove);
+    _som(SonsSistema.directionPadrao);
   }
 
   bool _comando(String comando) {
@@ -238,7 +238,7 @@ class _DescobrirTelaState extends State<DescobrirTela> {
     final jogos = _catalogo.jogos;
     if (_abrindo || jogos.isEmpty) return;
     _abrindo = true;
-    _som(SonsSistema.futuristicOpen);
+    _som(SonsSistema.clickPadrao);
     try {
       await abrirTelaLauncher<void>(
           context,
@@ -274,7 +274,7 @@ class _DescobrirTelaState extends State<DescobrirTela> {
   }
 
   Future<void> _filtrar(String genero) async {
-    _som(SonsSistema.click);
+    _som(SonsSistema.clickPadrao);
     setState(() => _indice = 0);
     if (_rolagem.hasClients) _rolagem.jumpTo(0);
     await _catalogo.atualizar(filtroGenero: genero);

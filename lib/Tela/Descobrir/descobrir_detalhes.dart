@@ -115,7 +115,7 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
   }
 
   Future<void> _abrirNoNavegador(Uri endereco) async {
-    _som(SonsSistema.futuristicOpen);
+    _som(SonsSistema.clickPadrao);
     try {
       if (await launchUrl(endereco, mode: LaunchMode.externalApplication)) {
         return;
@@ -136,7 +136,7 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
       _zona = _Zona.galeria;
     });
     _galeriaFocus.requestFocus();
-    _som(SonsSistema.futuristicMove);
+    _som(SonsSistema.directionPadrao);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _revelarMiniatura(alvo);
     });
@@ -166,7 +166,7 @@ class _DescobrirDetalhesState extends State<DescobrirDetalhes> {
     } else {
       _galeriaFocus.requestFocus();
     }
-    _som(SonsSistema.futuristicMove);
+    _som(SonsSistema.directionPadrao);
   }
 
   bool _comando(String comando, JogoDetalhes? ficha) {

@@ -4,7 +4,6 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import 'slim_mode_config_controller.dart';
 import 'launcher_window_controller.dart';
 
 final user32 = DynamicLibrary.open('user32.dll');
@@ -52,8 +51,6 @@ class JanelaCtrl with ChangeNotifier, WindowListener{
 
   
   String nomeJanelaSistema = "v1_game"; 
-  static const String _nomeJanelaSistema = "v1_game";
-  static const String _classeJanelaFlutter = "FLUTTER_RUNNER_WIN32_WINDOW";
   static const int GA_ROOT = 2;
   static const int SW_MINIMIZE = 6;
   static const int SW_RESTORE = 9;
@@ -99,11 +96,13 @@ class JanelaCtrl with ChangeNotifier, WindowListener{
     if (_fechando) return;
     debugPrint('[FECHAR_APP] X da janela recebido pelo Flutter.');
     _fechando = true;
+    LauncherWindowController.instance.dispose();
     await windowManager.destroy();
   }
 
   static Future<void> fecharAppForcado({String origem = 'desconhecida'}) async {
     debugPrint('[FECHAR_APP] Fechando janela solicitado por: $origem');
+    LauncherWindowController.instance.dispose();
     await windowManager.destroy();
   }
   
@@ -114,25 +113,15 @@ class JanelaCtrl with ChangeNotifier, WindowListener{
        return;
      }
      ativa = false;
-     if(telaPresa && !ativa) restoreWindow();
+     if(telaPresa && !ativa) {
+       LauncherWindowController.instance.recoverPinnedWindow();
+     }
   }
 
   static janelaAtiva () async => await windowManager.isFocused();
 
   static int _buscarJanelaPrincipal() {
-    final findWindow = user32.lookupFunction<FindWindowC, FindWindowDart>('FindWindowW');
-    final lpClassName = _classeJanelaFlutter.toNativeUtf16();
-    final lpWindowName = _nomeJanelaSistema.toNativeUtf16();
-    var hwnd = findWindow(lpClassName, lpWindowName);
-    if (hwnd == 0) {
-      hwnd = findWindow(lpClassName, nullptr);
-    }
-    if (hwnd == 0) {
-      hwnd = findWindow(nullptr, lpWindowName);
-    }
-    calloc.free(lpClassName);
-    calloc.free(lpWindowName);
-    return hwnd;
+    return LauncherWindowController.instance.nativeWindow.handle;
   }
 
   static bool appNaFrente() {
@@ -164,23 +153,8 @@ class JanelaCtrl with ChangeNotifier, WindowListener{
 
 
 
-  static void restoreWindow () async {
-    if (SlimModeConfigController.active.value) {
-      await LauncherWindowController.instance.apply();
-      await windowManager.show();
-      await windowManager.focus();
-      return;
-    }
-    // if(await windowManager.isVisible()) return;
-    await windowManager.minimize();
-    await windowManager.minimize();
-    Future.delayed(const Duration(milliseconds: 200));
-    await windowManager.maximize();
-    await windowManager.focus();
-    await windowManager.maximize();
-    // windowManager.show();    
-    debugPrint("Restart Tela Tras pra frente =======================================");
-  }
+  static Future<void> restoreWindow() =>
+      LauncherWindowController.instance.bringToFront();
 
   static void restoreWindow2(String windowName) {
 

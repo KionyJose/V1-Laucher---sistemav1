@@ -201,14 +201,17 @@ class _PrincipalPageState extends State<PrincipalPage> with WindowListener {
   }
 
   body(PrincipalCtrl ctrl){
-    bool desfocarFundo = ctrl.focusScope == ctrl.focusScopeCinema ||
+    final gridJogos = ctrl.cardGamesGrid && ctrl.selectedIndexAbaGuias == 0;
+    final desfocarFundo = gridJogos ||
+        ctrl.focusScope == ctrl.focusScopeCinema ||
         ctrl.focusScope == ctrl.focusScopeMusica ||
         ctrl.focusScope == ctrl.focusScopeLoja;
     return Stack(
       children: [
       backGroundAnimado(ctrl), // Fundo animado
-      if (!ctrl.transversalMode) cabeca(ctrl),
+      if (!ctrl.transversalMode && !gridJogos) cabeca(ctrl),
       desfoqueTela(desfocarFundo),
+      if (gridJogos) cabeca(ctrl),
       if (ctrl.telaIniciada) bodyPageView(ctrl),// Ícones horizontais
       abaGuias(ctrl),
       escurecerTela(ctrl),// Escurecer tela      

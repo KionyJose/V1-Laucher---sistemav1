@@ -15,7 +15,8 @@ class SonsSistema {
 
   static void direction() => SlimModeConfigController.active.value
       ? slimMove()
-      : futuristicActive ? futuristicMove() : _playSound('Sons/SomMovimento.mp3');
+      : futuristicActive ? futuristicMove() : directionPadrao();
+  static void directionPadrao() => _playSound('Sons/SomMovimento.mp3');
   static void directionRL() => SlimModeConfigController.active.value
       ? slimMove()
       : futuristicActive ? futuristicMove() : _playSound('Sons/SomMovimentoBaixo.mp3');
@@ -23,7 +24,8 @@ class SonsSistema {
   static void pim() => _playSound('Sons/SomCheat2.mp3');
   static void click() => SlimModeConfigController.active.value
       ? slimOpen()
-      : futuristicActive ? futuristicOpen() : _playSound('Sons/SomClick.mp3');
+      : futuristicActive ? futuristicOpen() : clickPadrao();
+  static void clickPadrao() => _playSound('Sons/SomClick.mp3');
   static bool get futuristicActive => !SlimModeConfigController.active.value &&
       configSistema.viewType == 'futurista';
   static void futuristicMove() =>

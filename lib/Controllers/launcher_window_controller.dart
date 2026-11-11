@@ -6,6 +6,7 @@ import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'slim_mode_config_controller.dart';
+import '../System/windows/pinned_launcher_window.dart';
 
 /// Geometria e transparência da janela, independentes da apresentação dos cards.
 class LauncherWindowController with WindowListener, ScreenListener {
@@ -20,6 +21,8 @@ class LauncherWindowController with WindowListener, ScreenListener {
   bool _applying = false;
   bool _pinned = true;
   Timer? _dockTimer;
+  Timer? _pinTimer;
+  final nativeWindow = PinnedLauncherWindow();
   Rect? _dockBounds;
   int _contentDepth = 0;
 
@@ -41,6 +44,9 @@ class LauncherWindowController with WindowListener, ScreenListener {
     windowManager.removeListener(this);
     screenRetriever.removeListener(this);
     _dockTimer?.cancel();
+    _pinTimer?.cancel();
+    _pinTimer = null;
+    nativeWindow.setPinned(false);
     _initialized = false;
   }
 
@@ -83,10 +89,8 @@ class LauncherWindowController with WindowListener, ScreenListener {
           height,
         );
         await windowManager.setBounds(_dockBounds!);
-        await windowManager.setAlwaysOnTop(_pinned);
       } else {
         _dockBounds = null;
-        await windowManager.setAlwaysOnTop(false);
         await windowManager.setResizable(true);
         await windowManager.setMaximizable(true);
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
@@ -96,6 +100,7 @@ class LauncherWindowController with WindowListener, ScreenListener {
       }
     } finally {
       _applying = false;
+      _syncPin();
     }
   }
 
@@ -106,10 +111,43 @@ class LauncherWindowController with WindowListener, ScreenListener {
 
   Future<void> setPinned(bool pinned) async {
     _pinned = pinned;
-    if (Platform.isWindows) {
-      await windowManager.setAlwaysOnTop(docked && pinned);
-    }
+    _syncPin();
   }
+
+  void _syncPin() {
+    if (!Platform.isWindows || !_initialized) return;
+    nativeWindow.setPinned(_pinned);
+    if (!_pinned) {
+      _pinTimer?.cancel();
+      _pinTimer = null;
+      return;
+    }
+    recoverPinnedWindow();
+    _pinTimer ??= Timer.periodic(const Duration(milliseconds: 350), (_) {
+      recoverPinnedWindow();
+    });
+  }
+
+  void recoverPinnedWindow() {
+    if (!_initialized || !_pinned || _applying) return;
+    nativeWindow.bringToFront(pinned: true);
+  }
+
+  Future<void> bringToFront() async {
+    if (!Platform.isWindows) return;
+    if (docked) await apply();
+    await windowManager.show();
+    nativeWindow.bringToFront(pinned: _pinned);
+  }
+
+  @override
+  void onWindowBlur() => recoverPinnedWindow();
+
+  @override
+  void onWindowRestore() => recoverPinnedWindow();
+
+  @override
+  void onWindowClose() => dispose();
 
   Future<void> closeContent() async {
     if (_contentDepth > 0) --_contentDepth;

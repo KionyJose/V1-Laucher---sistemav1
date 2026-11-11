@@ -33,10 +33,16 @@ class MovimentoSistema {
         focusScope.focusInDirection(TraversalDirection.down);
         estilo = vertical;
       }
-      if(estilo.isEmpty) SonsSistema.click();
+      if (estilo.isEmpty && !ehGatilho(event)) SonsSistema.click();
       if(estilo.isNotEmpty) SonsSistema.directionAtual();
     return estilo;
   }
+
+  static bool ehGatilho(String comando) =>
+      comando == 'LT' ||
+      comando == 'RT' ||
+      comando.startsWith('LT-') ||
+      comando.startsWith('RT-');
 
   static String normalizaEntrada(String event) {
     // debugPrint("MovimentoSistema.normalizaEntrada: $event");

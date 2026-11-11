@@ -40,7 +40,7 @@ do dedo de quem está rolando.
 
 ## Sons
 
-`SonsSistema.futuristicMove` ao trocar de cartão e ao trocar de captura na
+`SonsSistema.directionPadrao` ao trocar de cartão e ao trocar de captura na
 ficha; `futuristicOpen` ao abrir a ficha e ao abrir a loja; `click` no filtro
 de gênero. O parâmetro `sons: false` desliga tudo nos testes — o motor de áudio
 não sobe no ambiente de teste e imprime aviso a cada chamada.

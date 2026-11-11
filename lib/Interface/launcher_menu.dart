@@ -45,7 +45,8 @@ Future<void> mostrarMenuLauncher(BuildContext context) async {
   if (result == 'downloads') {
     await abrirTelaLauncher<void>(context, const DownloadsTela());
   } else if (result == 'loja') {
-    await abrirTelaLauncher<void>(context, buildLojaScreen());
+    await abrirTelaLauncher<void>(
+        context, LauncherNavigationSounds(child: buildLojaScreen()));
   }
 }
 

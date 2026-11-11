@@ -23,6 +23,7 @@ class DescobrirCard extends StatelessWidget {
   final VoidCallback onAbrir;
 
   static const violeta = Color(0xFFB6A8FF);
+  static const _raio = BorderRadius.all(Radius.circular(4));
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -39,7 +40,7 @@ class DescobrirCard extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: _raio,
                 border: Border.all(
                     color: selecionado
                         ? violeta
@@ -55,40 +56,8 @@ class DescobrirCard extends StatelessWidget {
                     : null,
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Stack(fit: StackFit.expand, children: [
-                  _Capa(jogo: jogo),
-                  // Degradê no pé: capas claras são comuns e o nome precisa
-                  // se sustentar por cima delas.
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.center,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x00000000), Color(0xE605040A)],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 10,
-                    right: 10,
-                    bottom: 8,
-                    child: Text(
-                      jogo.nome,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        height: 1.15,
-                        color: selecionado ? Colors.white : Colors.white70,
-                        shadows: const [
-                          Shadow(color: Colors.black, blurRadius: 6)
-                        ],
-                      ),
-                    ),
-                  ),
-                ]),
+                borderRadius: _raio,
+                child: _Capa(jogo: jogo),
               ),
             ),
           ),
@@ -102,25 +71,21 @@ class _Capa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Sem capa o cartão mostra a inicial, e não um buraco cinza.
-    Widget reserva() => ColoredBox(
-          color: const Color(0xFF1A1726),
-          child: Center(
-            child: Text(jogo.nome.isEmpty ? '?' : jogo.nome.characters.first,
-                style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF4B4470))),
-          ),
-        );
+    const reserva = ColoredBox(
+      color: Color(0xFF1A1726),
+      child: Center(
+        child: Icon(Icons.sports_esports_outlined,
+            size: 40, color: Color(0xFF4B4470)),
+      ),
+    );
     final imagem = jogo.imagem;
-    if (imagem == null) return reserva();
+    if (imagem == null) return reserva;
     return CachedNetworkImage(
       imageUrl: imagem.toString(),
       fit: BoxFit.cover,
       fadeInDuration: const Duration(milliseconds: 200),
       placeholder: (_, __) => const ColoredBox(color: Color(0xFF14121E)),
-      errorWidget: (_, __, ___) => reserva(),
+      errorWidget: (_, __, ___) => reserva,
     );
   }
 }
