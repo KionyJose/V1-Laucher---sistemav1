@@ -7,9 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart' hide Video;
+import '../../Widgets/youtube_web_playback.dart';
 
 /// Volume compartilhado pelos trailers da aba, incluindo as prévias.
 class VolumeTrailerCine extends ValueNotifier<double> {
@@ -72,43 +70,32 @@ class EscopoVolumeTrailer extends InheritedNotifier<VolumeTrailerCine> {
 /// porque a barra de progresso tem que se redesenhar sozinha, sem arrastar a
 /// ficha inteira junto a cada quadro do vídeo.
 class ControleTrailer extends ChangeNotifier {
-  Player? _player;
-  StreamSubscription<Duration>? _posicao;
-  StreamSubscription<Duration>? _duracao;
-  StreamSubscription<bool>? _tocandoAgora;
+  YoutubeWebPlayback? _player;
 
   Duration posicao = Duration.zero;
   Duration duracao = Duration.zero;
   bool pausado = false;
   bool pronto = false;
 
-  void _anexar(Player player) {
+  void _anexar(YoutubeWebPlayback player) {
     _soltar();
     _player = player;
-    pronto = true;
-    pausado = false;
-    _posicao = player.stream.position.listen((valor) {
-      posicao = valor;
-      notifyListeners();
-    });
-    _duracao = player.stream.duration.listen((valor) {
-      duracao = valor;
-      notifyListeners();
-    });
-    _tocandoAgora = player.stream.playing.listen((valor) {
-      pausado = !valor;
-      notifyListeners();
-    });
+    player.addListener(_atualizar);
+    _atualizar();
+  }
+
+  void _atualizar() {
+    final player = _player;
+    if (player == null) return;
+    pronto = player.ready && player.error == null;
+    pausado = !player.playing;
+    posicao = player.position;
+    duracao = player.duration;
     notifyListeners();
   }
 
   void _soltar() {
-    _posicao?.cancel();
-    _duracao?.cancel();
-    _tocandoAgora?.cancel();
-    _posicao = null;
-    _duracao = null;
-    _tocandoAgora = null;
+    _player?.removeListener(_atualizar);
     _player = null;
     pronto = false;
     posicao = Duration.zero;
@@ -117,6 +104,8 @@ class ControleTrailer extends ChangeNotifier {
   }
 
   void alternarPausa() => _player?.playOrPause();
+
+  void reproduzir() => _player?.play();
 
   /// Salta [passo] para frente ou para trás, sem passar das pontas.
   void pular(Duration passo) {
@@ -169,9 +158,7 @@ class TrailerCine extends StatefulWidget {
 }
 
 class _TrailerCineState extends State<TrailerCine> {
-  final _youtube = YoutubeExplode();
-  Player? _player;
-  VideoController? _video;
+  YoutubeWebPlayback? _player;
   String? _carregado;
   Timer? _agendado;
   bool _pronto = false;
@@ -196,6 +183,11 @@ class _TrailerCineState extends State<TrailerCine> {
   @override
   void didUpdateWidget(TrailerCine antigo) {
     super.didUpdateWidget(antigo);
+    if (widget.controle != antigo.controle) {
+      antigo.controle?._soltar();
+      final player = _player;
+      if (player != null) widget.controle?._anexar(player);
+    }
     if (widget.youtubeId != antigo.youtubeId || widget.tocar != antigo.tocar) {
       _agendar();
     }
@@ -220,39 +212,27 @@ class _TrailerCineState extends State<TrailerCine> {
   }
 
   Future<void> _abrir(String id) async {
-    try {
-      final manifesto = await _youtube.videos.streamsClient
-          .getManifest(id)
-          .timeout(const Duration(seconds: 20));
-      if (_morto || !mounted || widget.youtubeId != id || !widget.tocar) return;
-      if (manifesto.muxed.isEmpty) return;
-      final player = Player();
-      final video = VideoController(player);
-      await player.setVolume(_volumeAtual);
-      await player.setPlaylistMode(PlaylistMode.loop);
-      await player
-          .open(Media(manifesto.muxed.bestQuality.url.toString()))
-          .timeout(const Duration(seconds: 20));
-      if (_morto || !mounted || widget.youtubeId != id || !widget.tocar) {
-        await player.dispose();
-        return;
-      }
-      // O gatilho pode ter mudado o volume enquanto o stream carregava.
-      await player.setVolume(_volumeAtual);
-      if (_morto || !mounted || widget.youtubeId != id || !widget.tocar) {
-        await player.dispose();
-        return;
-      }
-      setState(() {
-        _player = player;
-        _video = video;
-        _carregado = id;
-        _pronto = true;
-      });
-      widget.controle?._anexar(player);
-      widget.onTocando?.call(true);
-    } catch (_) {
-      // Sem trailer tocável a arte fixa continua valendo; nada a avisar.
+    if (_morto || !mounted || widget.youtubeId != id || !widget.tocar) return;
+    final player = YoutubeWebPlayback(id, loop: true);
+    player.setVolume(_volumeAtual);
+    _player = player;
+    _carregado = id;
+    player.addListener(_atualizarVideo);
+    widget.controle?._anexar(player);
+    await player.initialize();
+  }
+
+  void _atualizarVideo() {
+    if (_morto || !mounted) return;
+    final player = _player;
+    if (player == null) return;
+    final pronto = player.started && player.error == null;
+    if (_pronto != pronto) {
+      setState(() => _pronto = pronto);
+      widget.onTocando?.call(pronto);
+    } else if (!pronto) {
+      // Monta a WebView assim que o servidor estiver disponível, antes do play.
+      setState(() {});
     }
   }
 
@@ -262,10 +242,10 @@ class _TrailerCineState extends State<TrailerCine> {
     // setState antes do primeiro quadro é erro.
     final desmontou = player != null || _pronto;
     _player = null;
-    _video = null;
     _carregado = null;
     _pronto = false;
     widget.controle?._soltar();
+    player?.removeListener(_atualizarVideo);
     player?.dispose();
     if (!desmontou) return;
     widget.onTocando?.call(false);
@@ -278,27 +258,24 @@ class _TrailerCineState extends State<TrailerCine> {
     widget.controle?._soltar();
     if (_pronto) widget.onTocando?.call(false);
     _agendado?.cancel();
-    _youtube.close();
+    _player?.removeListener(_atualizarVideo);
     _player?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final video = _video;
+    final player = _player;
     return AnimatedOpacity(
-      opacity: _pronto && video != null ? 1 : 0,
+      // Mantém a textura da WebView no pipeline durante a inicialização.
+      // Opacidade zero suprime a pintura antes do primeiro frame do vídeo.
+      opacity: _pronto && player != null ? 1 : .01,
       duration: const Duration(milliseconds: 900),
-      child: video == null
+      child: player == null
           ? const SizedBox.expand()
           : ExcludeFocus(
               child: IgnorePointer(
-                child: Video(
-                  controller: video,
-                  controls: NoVideoControls,
-                  fit: BoxFit.cover,
-                  fill: Colors.transparent,
-                ),
+                child: YoutubeWebVideo(playback: player, fit: BoxFit.cover),
               ),
             ),
     );

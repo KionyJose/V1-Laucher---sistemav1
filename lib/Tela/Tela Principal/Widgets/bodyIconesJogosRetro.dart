@@ -1,15 +1,12 @@
 // ignore_for_file: file_names
 
-import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart' as mkv;
+import '../../../Widgets/game_youtube_preview.dart';
 import 'package:v1_game/Modelos/IconeInicial.dart';
 import 'package:v1_game/Tela/Tela%20Principal/PrincipalCtrl.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 // ── Paleta Retro NES ─────────────────────────────────────────────────────────
 const _navy = Color(0xFF08102A);
@@ -39,29 +36,13 @@ class _BodyIconesJogosRetroState extends State<BodyIconesJogosRetro> {
   final _carouselCtrl = CarouselSliderController();
   final _thumbScroll = ScrollController();
 
-  late final Player _heroPlayer;
-  late final mkv.VideoController _heroCtrl;
-  Timer? _videoDebounce;
-  bool _heroAtivo = false;
-  bool _fundoPreto = true;
-  String _lastGame = '';
   int _lastIndex = 0;
-  int _videoVersao = 0;
 
   // ── ciclo de vida ────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
     _lastIndex = ctrl.selectedIndexIcone;
-    _heroPlayer = Player();
-    _heroCtrl = mkv.VideoController(_heroPlayer);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final nome = _nomeAtual;
-      if (nome.isNotEmpty) {
-        _lastGame = nome;
-        _agendarVideo(nome);
-      }
-    });
   }
 
   @override
@@ -73,20 +54,11 @@ class _BodyIconesJogosRetroState extends State<BodyIconesJogosRetro> {
         if (mounted) _animarParaIndice(_lastIndex);
       });
     }
-    final nome = _nomeAtual;
-    if (nome != _lastGame && nome.isNotEmpty) {
-      _lastGame = nome;
-      _agendarVideo(nome);
-    }
   }
 
   @override
   void dispose() {
-    _videoDebounce?.cancel();
     _thumbScroll.dispose();
-    try {
-      _heroPlayer.dispose();
-    } catch (_) {}
     super.dispose();
   }
 
@@ -103,69 +75,11 @@ class _BodyIconesJogosRetroState extends State<BodyIconesJogosRetro> {
       : ctrl.listIconsInicial[
           ctrl.selectedIndexIcone.clamp(0, ctrl.listIconsInicial.length - 1)];
 
-  void _agendarVideo(String nome) {
-    final versao = ++_videoVersao;
-    _videoDebounce?.cancel();
-    if (mounted) {
-      setState(() => _fundoPreto = true);
-    }
-    _videoDebounce = Timer(const Duration(milliseconds: 500), () {
-      _iniciarVideo(nome, versao);
-    });
-  }
-
-  Future<void> _iniciarVideo(String nome, int versao) async {
-    YoutubeExplode? yt;
-    try {
-      await _heroPlayer.stop();
-    } catch (_) {}
-    if (!mounted || versao != _videoVersao) return;
-    if (mounted) setState(() => _heroAtivo = false);
-    try {
-      const tags = ['Gameplay', 'cinematic'];
-      final tag = tags[Random().nextInt(tags.length)];
-      yt = YoutubeExplode();
-      final res = await yt.search.search('$nome $tag');
-      if (!mounted || versao != _videoVersao) return;
-      if (res.isEmpty) {
-        return;
-      }
-      final vid = res[Random().nextInt(res.length.clamp(1, 5))];
-      final mani = await yt.videos.streamsClient.getManifest(vid.id);
-      if (!mounted || versao != _videoVersao) return;
-      final str = mani.muxed.bestQuality;
-      await _heroPlayer.open(Media(str.url.toString()));
-      _heroPlayer.setVolume(0);
-      try {
-        await _heroPlayer.stream.playing
-            .firstWhere((playing) => playing)
-            .timeout(const Duration(seconds: 2));
-      } catch (_) {}
-      if (mounted && versao == _videoVersao) {
-        setState(() {
-          _heroAtivo = true;
-          _fundoPreto = false;
-        });
-      }
-    } catch (_) {
-      if (mounted && versao == _videoVersao) {
-        setState(() => _fundoPreto = true);
-      }
-    } finally {
-      yt?.close();
-    }
-  }
-
   void _onFoco(int i) {
     if (!mounted) return;
     _lastIndex = i;
     _animarParaIndice(i);
     ctrl.onFocusChangeIcones(true, i, tamanho: widget.tamanhoBloco);
-    final nome = _nomeAtual;
-    if (nome != _lastGame && nome.isNotEmpty) {
-      _lastGame = nome;
-      _agendarVideo(nome);
-    }
   }
 
   void _animarParaIndice(int i) {
@@ -217,22 +131,20 @@ class _BodyIconesJogosRetroState extends State<BodyIconesJogosRetro> {
         fit: StackFit.expand,
         children: [
           Container(color: _navy),
-          // Vídeo de fundo com efeito de vidro
-          if (_heroAtivo)
-            Opacity(
-                opacity: 0.25,
-                child: mkv.Video(
-                    controller: _heroCtrl,
-                    controls: mkv.NoVideoControls,
-                    fit: BoxFit.fill)),
-          if (!_heroAtivo && img.isNotEmpty)
-            Opacity(
-              opacity: 0.20,
-              child: Image.file(File(img),
-                  fit: BoxFit.cover,
-                  filterQuality: FilterQuality.low, // Estilo retro
-                  errorBuilder: (_, __, ___) => const SizedBox()),
+          // Prévia muda em WebView, com a mesma arte e opacidade do modo Retrô.
+          Opacity(
+            opacity: .25,
+            child: GameYoutubePreview(
+              game: _nomeAtual,
+              active: ctrl.stateTela && !ctrl.gameIniciado &&
+                  ctrl.selectedIndexAbaGuias == 0 && !ctrl.videoAtivo,
+              fallback: img.isEmpty
+                  ? const SizedBox.expand()
+                  : Image.file(File(img), fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
+                      errorBuilder: (_, __, ___) => const SizedBox()),
             ),
+          ),
 
           // Efeito de "Vignette" Retro
           Container(
@@ -263,12 +175,6 @@ class _BodyIconesJogosRetroState extends State<BodyIconesJogosRetro> {
                 stops: [0.0, 0.2, 0.8, 1.0],
               ),
             ),
-          ),
-          AnimatedOpacity(
-            opacity: _fundoPreto ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOut,
-            child: const ColoredBox(color: _navy),
           ),
         ],
       ),

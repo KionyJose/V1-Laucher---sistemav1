@@ -5,7 +5,7 @@ import '../../../Interface/pad_playback_hints.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart' hide Video;
+import '../../../Widgets/youtube_web_playback.dart';
 import '../scraps/jogo_detalhes.dart';
 import '../../../Interface/launcher_pad_scope.dart';
 
@@ -24,7 +24,7 @@ class TrailerPlayer extends StatefulWidget {
 }
 
 class TrailerPlayerState extends State<TrailerPlayer> {
-  final _youtube = YoutubeExplode();
+  YoutubeWebPlayback? _webPlayback;
   Player? _player;
   VideoController? _video;
   StreamSubscription<String>? _erros;
@@ -58,11 +58,17 @@ class TrailerPlayerState extends State<TrailerPlayer> {
       }
       return;
     }
+    // A criação nativa pendente ainda não pode ser transferida para outra view.
+    final web = _webPlayback;
+    if (web != null && !web.viewCreated) return;
     final box = _viewport.currentContext?.findRenderObject() as RenderBox?;
     final origin =
         box == null ? null : box.localToGlobal(Offset.zero) & box.size;
     final reduce = MediaQuery.disableAnimationsOf(context);
     _refresh(() => _fullscreen = true);
+    // Desanexa a WebView antes de reutilizá-la na rota ampliada.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || _disposing) return;
     final route = PageRouteBuilder<void>(
         opaque: false,
         transitionDuration: Duration(milliseconds: reduce ? 0 : 420),
@@ -135,16 +141,15 @@ class TrailerPlayerState extends State<TrailerPlayer> {
 
   Future<void> _iniciar() async {
     try {
-      var endereco = widget.trailer.videoDireto;
+      final endereco = widget.trailer.videoDireto;
       if (endereco == null) {
-        final manifest = await _youtube.videos.streamsClient
-            .getManifest(widget.trailer.youtubeId)
-            .timeout(const Duration(seconds: 30));
-        if (!mounted) return;
-        if (manifest.muxed.isEmpty) {
-          throw StateError('Trailer sem stream compatível.');
-        }
-        endereco = manifest.muxed.bestQuality.url;
+        final playback = YoutubeWebPlayback(widget.trailer.youtubeId);
+        _webPlayback = playback;
+        playback.setVolume(_volume);
+        if (_suspended) playback.pause();
+        playback.addListener(_webChanged);
+        await playback.initialize();
+        return;
       }
       final player = Player();
       _player = player;
@@ -169,11 +174,26 @@ class TrailerPlayerState extends State<TrailerPlayer> {
     }
   }
 
+  void _webChanged() {
+    final playback = _webPlayback;
+    if (playback == null || !mounted || _disposing) return;
+    final loading = !playback.ready && playback.error == null;
+    if (_carregando != loading || _erro != playback.error) {
+      _refresh(() {
+        _carregando = loading;
+        _erro = playback.error;
+      });
+    } else if (playback.url != null && _carregando) {
+      _refresh(() {});
+    }
+  }
+
   @override
   void dispose() {
     _disposing = true;
     _viewRevision.dispose();
-    _youtube.close();
+    _webPlayback?.removeListener(_webChanged);
+    _webPlayback?.dispose();
     _erros?.cancel();
     _player?.dispose();
     super.dispose();
@@ -182,6 +202,7 @@ class TrailerPlayerState extends State<TrailerPlayer> {
   Future<void> _abrirYouTube() async {
     try {
       await _player?.pause();
+      _webPlayback?.pause();
       if (await launchUrl(widget.trailer.url,
           mode: LaunchMode.externalApplication)) {
         return;
@@ -196,6 +217,7 @@ class TrailerPlayerState extends State<TrailerPlayer> {
   void togglePlayback() {
     _showHints();
     _player?.playOrPause();
+    _webPlayback?.playOrPause();
   }
 
   bool command(String command) {
@@ -220,14 +242,15 @@ class TrailerPlayerState extends State<TrailerPlayer> {
       if (pressure < 30) return true;
       _showHints();
       final now = DateTime.now();
-      if (player != null &&
+      if ((player != null || _webPlayback != null) &&
           (_lastVolumeChange == null ||
               now.difference(_lastVolumeChange!) >=
                   const Duration(milliseconds: 150))) {
         _lastVolumeChange = now;
         _volume =
             (_volume + (trigger.group(1) == 'RT' ? 5 : -5)).clamp(0.0, 100.0);
-        player.setVolume(_volume);
+        player?.setVolume(_volume);
+        _webPlayback?.setVolume(_volume);
         if (mounted) _refresh(() {});
       }
       return true;
@@ -235,9 +258,17 @@ class TrailerPlayerState extends State<TrailerPlayer> {
     if (command == 'START') {
       _suspended = true;
       player?.pause();
+      _webPlayback?.pause();
     }
-    if (player != null && (command == 'LB' || command == 'RB')) {
+    if ((player != null || _webPlayback != null) &&
+        (command == 'LB' || command == 'RB')) {
       final delta = Duration(seconds: command == 'LB' ? -10 : 10);
+      final web = _webPlayback;
+      if (web != null) {
+        web.seek(web.position + delta);
+        return true;
+      }
+      if (player == null) return true;
       final position = player.state.position + delta;
       player.seek(position.isNegative
           ? Duration.zero
@@ -255,18 +286,27 @@ class TrailerPlayerState extends State<TrailerPlayer> {
           child: !fullscreen && _fullscreen
               ? const ColoredBox(color: Colors.black)
               : Stack(fit: StackFit.expand, children: [
-                  if (_erro != null)
-                    Center(
-                        child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Text(_erro!, textAlign: TextAlign.center)))
-                  else if (_carregando)
-                    const Center(child: CircularProgressIndicator())
-                  else
+                  if (_webPlayback != null)
+                    YoutubeWebVideo(
+                        playback: _webPlayback!,
+                        fit: fullscreen ? BoxFit.contain : widget.fit)
+                  else if (!_carregando && _erro == null)
                     Video(
                         controller: _video!,
                         controls: NoVideoControls,
                         fit: fullscreen ? BoxFit.contain : widget.fit),
+                  if (_erro != null)
+                    ColoredBox(
+                      color: Colors.black,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(_erro!, textAlign: TextAlign.center),
+                        ),
+                      ),
+                    ),
+                  if (_carregando && _erro == null)
+                    const Center(child: CircularProgressIndicator()),
                   Positioned(
                       left: 12,
                       right: 12,
@@ -296,17 +336,7 @@ class TrailerPlayerState extends State<TrailerPlayer> {
                             autofocus: true,
                             onPressed: () => Navigator.pop(context),
                             icon: const Icon(Icons.close))),
-                    AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: _erro != null
-                            ? Center(
-                                child: Padding(
-                                    padding: const EdgeInsets.all(20),
-                                    child: Text(_erro!)))
-                            : _carregando
-                                ? const Center(
-                                    child: CircularProgressIndicator())
-                                : Video(controller: _video!)),
+                    AspectRatio(aspectRatio: 16 / 9, child: _inlineVideo()),
                     Padding(
                         padding: const EdgeInsets.all(12),
                         child: Wrap(spacing: 12, runSpacing: 8, children: [
@@ -314,7 +344,7 @@ class TrailerPlayerState extends State<TrailerPlayer> {
                               autofocus: true,
                               onPressed: _carregando || _erro != null
                                   ? null
-                                  : () => _player?.playOrPause(),
+                                  : togglePlayback,
                               icon: const Icon(Icons.play_arrow),
                               label: const Text('Reproduzir / Pausar')),
                           OutlinedButton.icon(

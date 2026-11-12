@@ -32,7 +32,15 @@ As outras categorias continuam usando suas ações originais.
   A/B/Enter retornam à seleção de jogos após confirmação do início e
   introdução mínima de 2 s. Falhas permanecem na biblioteca com aviso.
 - `pad_playback_hints.dart`: faixa reutilizável de instruções com timeout e fade.
-  `TrailerPlayer` mantém o Player/VideoController ao expandir ou recolher.
+  `TrailerPlayer` mantém a reprodução ao expandir ou recolher: vídeos do YouTube
+  usam `YoutubeWebPlayback` (IFrame API em WebView, servidor HTTP local e
+  keepAlive); URLs diretas continuam usando MediaKit. Os comandos do launcher
+  controlam pausa, saltos de 10 s, volume e ampliação. `TrailerCine` compartilha
+  o mesmo motor WebView, preservando a espera, o volume da aba e o progresso.
+  Os vídeos da lista na tela principal, o fundo automático e as prévias Moderno
+  e Retrô também usam esse motor. `GameYoutubePreview` busca somente o ID do
+  vídeo e cancela buscas antigas ao trocar o jogo. A playlist principal mantém
+  progresso, saltos de 10 s, pausa e ampliação; prévias continuam mudas.
 - `tools/generate_futuristic_launch.py`: recria a composição sem samples;
   `SonsSistema` pré-carrega o som e respeita o volume global.
 

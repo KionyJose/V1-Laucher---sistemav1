@@ -23,8 +23,7 @@ import 'package:v1_game/Modelos/JogoBuscado.dart';
 import 'package:v1_game/Modelos/NoticiaGame.dart';
 import 'package:v1_game/Modelos/videoYT.dart';
 import 'package:v1_game/Tela/games_busca.dart/games_busca_tela.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import '../../Widgets/youtube_web_playback.dart';
 import 'package:v1_game/Widgets/Pops/pop_config.dart';
 import 'package:v1_game/Widgets/Pops/pop_mais.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -196,10 +195,82 @@ class PrincipalCtrl with ChangeNotifier{
 
   PageController bodyCtrl = PageController();
 
-  late Player mediaPlayer;
-  late VideoController mediaController;
-  late Player bgMediaPlayer;
-  late VideoController bgMediaController;
+  YoutubeWebPlayback? mediaPlayback;
+  YoutubeWebPlayback? bgPlayback;
+  String? videoErro;
+  bool _nextVideoScheduled = false;
+
+  void _pararVideoPrincipal() {
+    final playback = mediaPlayback;
+    mediaPlayback = null;
+    playback?.removeListener(_videoPrincipalMudou);
+    playback?.dispose();
+  }
+
+  void _pararVideoFundo() {
+    final playback = bgPlayback;
+    bgPlayback = null;
+    playback?.removeListener(_videoFundoMudou);
+    playback?.dispose();
+  }
+
+  void _videoPrincipalMudou() {
+    final playback = mediaPlayback;
+    if (_disposed || playback == null) return;
+    duracaoAtual = playback.position;
+    duracaoTotal = playback.duration;
+    videoCarregando = !playback.ready && playback.error == null;
+    videoErro = playback.error;
+    if (playback.completed && videoAtivo && videosYT.isNotEmpty) {
+      if (!_nextVideoScheduled) {
+        _nextVideoScheduled = true;
+        scheduleMicrotask(() {
+          _nextVideoScheduled = false;
+          if (_disposed || !identical(mediaPlayback, playback) ||
+              !videoAtivo || videosYT.isEmpty) {
+            return;
+          }
+          selectedIndexVideo = (selectedIndexVideo + 1) % videosYT.length;
+          unawaited(_iniciarVideoPrincipal());
+        });
+      }
+      return;
+    }
+    attTela();
+  }
+
+  Future<void> _iniciarVideoPrincipal() async {
+    if (_disposed || videosYT.isEmpty || selectedIndexVideo < 0 ||
+        selectedIndexVideo >= videosYT.length) {
+      return;
+    }
+    _pararVideoPrincipal();
+    final video = videosYT[selectedIndexVideo];
+    final playback = YoutubeWebPlayback(VideoId(video.url).value);
+    mediaPlayback = playback;
+    if (!stateTela || gameIniciado) playback.pause();
+    videoAtivo = true;
+    videoCarregando = true;
+    videoErro = null;
+    contadorVideo = true;
+    duracaoTotal = Duration.zero;
+    duracaoAtual = Duration.zero;
+    playback.addListener(_videoPrincipalMudou);
+    attTela();
+    await playback.initialize();
+  }
+
+  void _videoFundoMudou() {
+    final playback = bgPlayback;
+    if (_disposed || playback == null) return;
+    final visible = playback.started && playback.error == null;
+    // O primeiro aviso monta a WebView; depois só redesenha ao mudar a imagem.
+    if (showBgVideo != visible || !playback.started) {
+      showBgVideo = visible;
+      showNewImage = !visible;
+      attTela();
+    }
+  }
   List<String> tagVideo = List.of(GameVideoTags.values);
   
   List<String> listAbaGuias= ["Games","Cinema","Musica","Loja"];
@@ -283,8 +354,8 @@ class PrincipalCtrl with ChangeNotifier{
     timerImersaoVideos?.cancel();
     timerLoadVideos?.cancel();
     timerFundoCard?.cancel();
-    mediaPlayer.stop();
-    bgMediaPlayer.stop();
+    _pararVideoPrincipal();
+    _pararVideoFundo();
     SonsSistema.clickRetroAtivo = false;
     if (compactNavigation) {
       ctrlAnimeBgFundo.stop();
@@ -574,41 +645,6 @@ class PrincipalCtrl with ChangeNotifier{
     selectedIndexMusica = 0;
     selectedIndexLoja = 0;
     
-    // Inicializa media_kit player
-    mediaPlayer = Player();
-    mediaController = VideoController(mediaPlayer);
-    bgMediaPlayer = Player();
-    bgMediaController = VideoController(bgMediaPlayer);
-    bgMediaPlayer.setVolume(0);
-    
-    // Escuta duração e posição
-    mediaPlayer.stream.duration.listen((duration) {
-      duracaoTotal = duration;
-      attTela();
-    });
-    
-    mediaPlayer.stream.position.listen((position) {
-      duracaoAtual = position;
-      attTela();
-    });
-    
-    // Escuta quando o vídeo termina para tocar o próximo
-    mediaPlayer.stream.completed.listen((completed) {
-      if (completed && videoAtivo) {
-        debugPrint("🎬 Vídeo finalizado, carregando próximo...");
-        // Avança para o próximo vídeo
-        int proximoIndex = selectedIndexVideo + 1;
-        if (proximoIndex < videosYT.length) {
-          selectedIndexVideo = proximoIndex;
-          carregaNovoVideo(selectedIndexVideo - 1);
-        } else {
-          debugPrint("🎬 Fim da playlist, voltando ao início");
-          selectedIndexVideo = 0;
-          carregaNovoVideo(videosYT.length - 1);
-        }
-      }
-    });
-    
     focusNodeAbaGuias = List.generate(listAbaGuias.length, (index) => FocusNode());
     focusNodeAbaGuias[0].requestFocus();
     focusScopeIcones.requestFocus();
@@ -684,8 +720,8 @@ class PrincipalCtrl with ChangeNotifier{
     timerImersaoVideos?.cancel();
     timerLoadVideos?.cancel();
     timerFundoCard?.cancel();
-    try { mediaPlayer.dispose(); } catch (_) {}
-    try { bgMediaPlayer.dispose(); } catch (_) {}
+    try { _pararVideoPrincipal(); } catch (_) {}
+    try { _pararVideoFundo(); } catch (_) {}
     try { ctrlAnimeBgFundo.dispose(); } catch (_) {}
     try { scrolListIcones.dispose(); } catch (_) {}
     try { scrolListAbaGuias.dispose(); } catch (_) {}
@@ -828,7 +864,7 @@ class PrincipalCtrl with ChangeNotifier{
     selectedIndexVideo = 0;
     videosYT.clear();
     videosCarregados = false;
-    try { bgMediaPlayer.stop(); } catch (_) {}
+    try { _pararVideoFundo(); } catch (_) {}
     attTela();
 
     timerFundoCard = Timer(const Duration(milliseconds: 1500), () async {
@@ -844,20 +880,22 @@ class PrincipalCtrl with ChangeNotifier{
           yt = YoutubeExplode();
           final pesquisa = await yt.search.search('${item.nome} gameplay');
           final resultado = pesquisa.first;
-          final manifest = await yt.videos.streamsClient.getManifest(resultado.id);
-          final stream = manifest.muxed.bestQuality;
-
           if(!_disposed && !slimMode && versao == _fundoCardVersao && selectedIndexIcone == index && selectedIndexAbaGuias == 0) {
-            await bgMediaPlayer.open(Media(stream.url.toString()));
-            if (_disposed || slimMode || versao != _fundoCardVersao) {
-              if (!_disposed) await bgMediaPlayer.stop();
-              return;
-            }
-            await bgMediaPlayer.setVolume(0);
-            showBgVideo = true;
-            showNewImage = false;
+            final playback = YoutubeWebPlayback(resultado.id.value, loop: true);
+            _pararVideoFundo();
+            bgPlayback = playback;
+            playback.setVolume(0);
+            if (!stateTela || gameIniciado) playback.pause();
+            imgFundoStr = item.imgStr;
+            showNewImage = true;
+            playback.addListener(_videoFundoMudou);
             videoAberto = true;
             attTela();
+            await playback.initialize();
+            if (_disposed || versao != _fundoCardVersao ||
+                !identical(bgPlayback, playback)) {
+              return;
+            }
             pesquisaVideosYT(item.nome, index);
           }
         } catch (e) {
@@ -886,7 +924,7 @@ class PrincipalCtrl with ChangeNotifier{
     showBgVideo = false;
     showNewImage = true;
     imgFundoStr = listIconsInicial[index].imgStr;
-    try { bgMediaPlayer.stop(); } catch (_) {}
+    try { _pararVideoFundo(); } catch (_) {}
     attTela();
   }
 
@@ -1186,75 +1224,21 @@ class PrincipalCtrl with ChangeNotifier{
     }
   }
 
-  carregaNovoVideo(int index) async {
-    if(!videoAtivo) return;
-    
-    // Verifica se há vídeos disponíveis
+  Future<void> carregaNovoVideo(int index) async {
+    if (!videoAtivo) return;
     if (videosYT.isEmpty) {
-      // Para o vídeo antes de sair
-      try {
-        await mediaPlayer.stop();
-      } catch (_) {}
+      _pararVideoPrincipal();
       videoAtivo = false;
       attTela();
       return;
     }
-    
-    if(index == selectedIndexVideo){
-      int total = videosYT.length-1;
-      bool primeiro = total == index;
-      primeiro ? selectedIndexVideo = 0 : selectedIndexVideo = index + 1;
+    if (index == selectedIndexVideo) {
+      selectedIndexVideo = (index + 1) % videosYT.length;
     }
-    
-    // Garante que o índice está dentro dos limites
     if (selectedIndexVideo < 0 || selectedIndexVideo >= videosYT.length) {
       selectedIndexVideo = 0;
     }
-    
-    contadorVideo = true;
-    duracaoTotal = Duration.zero;
-    duracaoAtual = Duration.zero;
-   
-    // Para o vídeo atual imediatamente
-    try {
-      await mediaPlayer.stop();
-    } catch (_) {}
-    
-    // Mantém vídeo ativo e ativa loading IMEDIATAMENTE
-    videoAtivo = true;
-    videoCarregando = true;
-    attTela();
-
-    // Carrega o novo vídeo sem delay
-    Timer(const Duration(milliseconds: 50), () async {
-      // Verifica novamente antes de carregar
-      if (videosYT.isNotEmpty && selectedIndexVideo >= 0 && selectedIndexVideo < videosYT.length) {
-        
-        // Extrai URL direta do YouTube
-        try {
-          final yt = YoutubeExplode();
-          final videoId = VideoId(videosYT[selectedIndexVideo].url);
-          final manifest = await yt.videos.streamsClient.getManifest(videoId);
-          
-          // Pega a melhor qualidade muxed (vídeo + áudio)
-          final streamInfo = manifest.muxed.bestQuality;
-          
-          await mediaPlayer.open(Media(streamInfo.url.toString()));
-          debugPrint("Novo vídeo carregado: ${streamInfo.url}");
-          
-          // Aguarda um pouco para o vídeo começar a renderizar
-          await Future.delayed(const Duration(milliseconds: 500));
-          videoCarregando = false; // Desativa o loading após vídeo carregar
-          
-          yt.close();
-        } catch (e) {
-          debugPrint("ERRO ao carregar novo vídeo: $e");
-          videoCarregando = false; // Desativa loading em caso de erro
-        }
-        
-        attTela();
-      }
-    });
+    await _iniciarVideoPrincipal();
   }
   animaFundo(){
     ctrlAnimeBgFundo = AnimationController(
@@ -1905,7 +1889,7 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
         }
       }
       if (event == "RB"){
-        // mediaPlayer.seek(Duration.zero);
+        // Salto tratado abaixo pelo novo player.
       }
       
       // L1: Retroceder 10 segundos
@@ -1915,7 +1899,7 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
           final novaPosicao = duracaoAtual - const Duration(seconds: 10);
           final posicaoFinal = novaPosicao.isNegative ? Duration.zero : novaPosicao;
           try {
-            await mediaPlayer.seek(posicaoFinal);
+            mediaPlayback?.seek(posicaoFinal);
             duracaoAtual = posicaoFinal; // Atualiza imediatamente a posição
             attTela(); // Força atualização da barra de progresso
             debugPrint("✓ Retrocedeu para: ${posicaoFinal.inSeconds}s");
@@ -1932,7 +1916,7 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
           final novaPosicao = duracaoAtual + const Duration(seconds: 10);
           final posicaoFinal = novaPosicao > duracaoTotal ? duracaoTotal : novaPosicao;
           try {
-            await mediaPlayer.seek(posicaoFinal);
+            mediaPlayback?.seek(posicaoFinal);
             duracaoAtual = posicaoFinal; // Atualiza imediatamente a posição
             attTela(); // Força atualização da barra de progresso
             debugPrint("✓ Avançou para: ${posicaoFinal.inSeconds}s");
@@ -1945,63 +1929,17 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
       if(event=="R3") { imersaoVideos = !imersaoVideos;}
       if(event.contains("RT-")) TecladoCtrl.aumentarVolume();
       if(event.contains("LT-")) TecladoCtrl.diminuirVolume();
-      if (event == "START") mediaPlayer.playOrPause();
+      if (event == "START") mediaPlayback?.playOrPause();
       if (event == "2") {
-        // Verifica se há vídeos disponíveis antes de ativar
-        if (videosYT.isEmpty || selectedIndexVideo < 0 || selectedIndexVideo >= videosYT.length) {
-          debugPrint("ERRO: Não há vídeos disponíveis ou índice inválido");
-          return;
-        }
-        
-        duracaoTotal = Duration.zero;
-        duracaoAtual = Duration.zero;
-        
-        // Para o vídeo atual imediatamente
-        try {
-          await mediaPlayer.stop();
-        } catch (_) {}
-        
-        // Ativa vídeo e loading IMEDIATAMENTE ao clicar
-        videoAtivo = true;
-        videoCarregando = true;
-        attTela();
-        
-        Timer(const Duration(milliseconds: 50), () async {
-          if (videosYT.isNotEmpty && selectedIndexVideo >= 0 && selectedIndexVideo < videosYT.length) {
-            contadorVideo = true;
-            
-            // Extrai URL direta do YouTube e abre no media_kit
-            try {
-              final yt = YoutubeExplode();
-              final videoId = VideoId(videosYT[selectedIndexVideo].url);
-              final manifest = await yt.videos.streamsClient.getManifest(videoId);
-              
-              // Pega a melhor qualidade muxed (vídeo + áudio)
-              final streamInfo = manifest.muxed.bestQuality;
-              
-              await mediaPlayer.open(Media(streamInfo.url.toString()));
-              debugPrint("Vídeo aberto: ${streamInfo.url}");
-              
-              // Aguarda um pouco para o vídeo começar a renderizar
-              await Future.delayed(const Duration(milliseconds: 500));
-              videoCarregando = false; // Desativa loading
-              
-              yt.close();
-            } catch (e) {
-              debugPrint("ERRO ao abrir vídeo do YouTube: $e");
-              videoCarregando = false; // Desativa loading em caso de erro
-            }
-            
-            attTela();
-          }
-        });
+        if (videosYT.isEmpty || selectedIndexVideo < 0 || selectedIndexVideo >= videosYT.length) return;
+        await _iniciarVideoPrincipal();
       }
       if (event == "3" || event == "BAIXO"){
         imersaoVideos = false;
         
         // Para o vídeo imediatamente ao sair
         try {
-          await mediaPlayer.stop();
+          _pararVideoPrincipal();
           debugPrint("Vídeo parado ao sair");
         } catch (_) {}
         
@@ -2190,12 +2128,15 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
     final libraryRevision = InstalledGameLibrary.revision;
     final oldScope = focusScope;
     final oldFocus = FocusManager.instance.primaryFocus;
-    final resumeVideo = mediaPlayer.state.playing;
-    final resumeBackground = bgMediaPlayer.state.playing;
+    final previousVideo = mediaPlayback;
+    final resumeVideo = previousVideo?.wantsPlay ?? false;
+    final previousBackground = bgPlayback;
+    final resumeBackground = previousBackground?.wantsPlay ?? false;
     stateTela = false;
     Provider.of<Paad>(ctx, listen: false).click = '';
-    await mediaPlayer.pause();
-    await bgMediaPlayer.pause();
+    mediaPlayback?.pause();
+    bgPlayback?.pause();
+    attTela();
     try {
       await abrirTelaLauncher<void>(ctx, tela);
     } finally {
@@ -2212,8 +2153,8 @@ if (-not [WindowsPower]::SetSuspendState($false, $false, $false)) { exit 1 }
           } else {
             focusNodeIcones.first.requestFocus();
           }
-          if (resumeVideo) await mediaPlayer.play();
-          if (resumeBackground) await bgMediaPlayer.play();
+          if (resumeVideo && identical(previousVideo, mediaPlayback)) mediaPlayback?.play();
+          if (resumeBackground && identical(previousBackground, bgPlayback)) bgPlayback?.play();
           limparClickPad();
           attTela();
         }

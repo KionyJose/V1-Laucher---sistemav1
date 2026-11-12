@@ -2,17 +2,14 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart' as mkv;
+import '../../../Widgets/game_youtube_preview.dart';
 import 'package:v1_game/Class/WebScrap.dart';
 import 'package:v1_game/Interface/noticia_game_artwork.dart';
 import 'package:v1_game/Modelos/NoticiaGame.dart';
 import 'package:v1_game/Tela/Tela Principal/PrincipalCtrl.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 // ── Paleta azul-violeta ────────────────────────────────────────────────────────
 const _corP = Color(0xFF3B2BDB);
@@ -41,31 +38,17 @@ class BodyIconesJogosModerno extends StatefulWidget {
 
 class _BodyIconesJogosModernoState extends State<BodyIconesJogosModerno> {
   String _lastGame = '';
-  String _lastGameHero = '';
   final _newsScroll = ScrollController();
   Timer? _newsTickerTimer;
-
-  // ── Hero background video ───────────────────────────────────────────────────
-  late final Player _heroPlayer;
-  late final mkv.VideoController _heroController;
-  bool _heroVideoAtivo = false;
 
   PrincipalCtrl get ctrl => widget.ctrl;
 
   @override
   void initState() {
     super.initState();
-    _heroPlayer = Player();
-    _heroController = mkv.VideoController(_heroPlayer);
     ctrl.abrirNoticiaCallback = (n) => _abrirNoticia(n);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadNoticias();
-      // Inicia o video hero imediatamente ao montar o widget
-      final nome = _nomeAtual;
-      if (nome.isNotEmpty) {
-        _lastGameHero = nome;
-        _reiniciarHeroVideo(nome);
-      }
     });
   }
 
@@ -73,44 +56,6 @@ class _BodyIconesJogosModernoState extends State<BodyIconesJogosModerno> {
   void didUpdateWidget(BodyIconesJogosModerno old) {
     super.didUpdateWidget(old);
     _loadNoticias();
-    // Inicia o video hero sempre que o game atual mudar (não só ao focar no card)
-    final nome = _nomeAtual;
-    if (nome != _lastGameHero && nome.isNotEmpty) {
-      _lastGameHero = nome;
-      _reiniciarHeroVideo(nome);
-    }
-    // Para o video quando sai do modo moderno
-    if (ctrl.focusScope != ctrl.focusScopeCardInf && _heroVideoAtivo && ctrl.focusScope == ctrl.focusScopeNoticias) {
-      // mantém tocando — pausa só se o widget for descartado
-    }
-  }
-
-  Future<void> _reiniciarHeroVideo(String nomeGame) async {
-    await _pararHeroVideoAsync();
-    // Busca vídeo diretamente com tag aleatória — não depende de videosYT já carregado
-    try {
-      final tags = ctrl.tagVideo;
-      if (tags.isEmpty) return;
-      final tag = tags[Random().nextInt(tags.length)];
-      final query = '$nomeGame $tag';
-      final yt = YoutubeExplode();
-      final results = await yt.search.search(query);
-      if (results.isEmpty) { yt.close(); return; }
-      final video = results[Random().nextInt(results.length.clamp(1, 5))];
-      final manifest = await yt.videos.streamsClient.getManifest(video.id);
-      final stream = manifest.muxed.bestQuality;
-      await _heroPlayer.open(Media(stream.url.toString()));
-      _heroPlayer.setVolume(0);
-      yt.close();
-      if (mounted) setState(() { _heroVideoAtivo = true; });
-    } catch (e) {
-      debugPrint('ERRO reiniciarHeroVideo: $e');
-    }
-  }
-
-  Future<void> _pararHeroVideoAsync() async {
-    try { await _heroPlayer.stop(); } catch (_) {}
-    if (mounted) setState(() => _heroVideoAtivo = false);
   }
 
   String get _nomeAtual => ctrl.listIconsInicial.isEmpty
@@ -152,7 +97,6 @@ class _BodyIconesJogosModernoState extends State<BodyIconesJogosModerno> {
     ctrl.abrirNoticiaCallback = null;
     _newsTickerTimer?.cancel();
     _newsScroll.dispose();
-    try { _heroPlayer.dispose(); } catch (_) {}
     super.dispose();
   }
 
@@ -352,21 +296,20 @@ class _BodyIconesJogosModernoState extends State<BodyIconesJogosModerno> {
                 SizedBox(
                   width: cardW,
                   height: videoH,
-                  child: _heroVideoAtivo
-                      ? mkv.Video(
-                          controller: _heroController,
-                          controls: mkv.NoVideoControls,
-                        )
-                      : Container(
-                          color: const Color(0xFF0A081A),
-                          child: const Center(
-                            child: Icon(
-                              Icons.videogame_asset_rounded,
-                              color: Colors.white12,
-                              size: 38,
-                            ),
-                          ),
-                        ),
+                  child: GameYoutubePreview(
+                    game: _nomeAtual,
+                    tags: ctrl.tagVideo,
+                    active: ctrl.stateTela && !ctrl.gameIniciado &&
+                        ctrl.selectedIndexAbaGuias == 0 && !ctrl.videoAtivo,
+                    fallback: Container(
+                      color: const Color(0xFF0A081A),
+                      child: const Center(child: Icon(
+                        Icons.videogame_asset_rounded,
+                        color: Colors.white12,
+                        size: 38,
+                      )),
+                    ),
+                  ),
                 ),
                 // ── Título e botões ──
                 Padding(

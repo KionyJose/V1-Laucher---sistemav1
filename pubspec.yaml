@@ -61,6 +61,10 @@ dependencies:
   lottie: ^3.6.1
   # Minhas Dependencias =======================================================================
 
+dependency_overrides:
+  flutter_inappwebview_windows:
+    path: packages/flutter_inappwebview_windows
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

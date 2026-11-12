@@ -14,7 +14,7 @@ import 'package:v1_game/Widgets/TituloGames.dart';
 import 'package:v1_game/Widgets/cardGame.dart';
 import 'package:v1_game/Widgets/VideoSliders.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import '../../Widgets/youtube_web_playback.dart';
 import 'Widgets/BodyIconesJogos.dart';
 import 'Widgets/BodyIconesCinema.dart';
 import '../Cinema/body_cinema.dart';
@@ -356,12 +356,18 @@ class _PrincipalPageState extends State<PrincipalPage> with WindowListener {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(50),
-              child: Video(
-                key: ValueKey('${ctrl.selectedIndexVideo}_${ctrl.videosYT[ctrl.selectedIndexVideo].url}'),
-                controller: ctrl.mediaController,
-                controls: NoVideoControls,
-              ),
+              child: ctrl.mediaPlayback == null
+                  ? const SizedBox.expand()
+                  : YoutubeWebVideo(
+                      key: ObjectKey(ctrl.mediaPlayback),
+                      playback: ctrl.mediaPlayback!,
+                    ),
             ),
+            if (ctrl.videoErro != null)
+              Center(child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(ctrl.videoErro!, textAlign: TextAlign.center),
+              )),
             // Loading bonito do vídeo
             if(ctrl.videoCarregando)
               ClipRRect(
@@ -643,14 +649,16 @@ class _PrincipalPageState extends State<PrincipalPage> with WindowListener {
               ),
             ),
             AnimatedOpacity(
-              opacity: ctrl.showBgVideo ? 1.0 : 0.0,
+              opacity: ctrl.showBgVideo ? 1.0 : .01,
               duration: const Duration(seconds: 1),
               child: SizedBox.expand(
-                child: Video(
-                  controller: ctrl.bgMediaController,
-                  controls: NoVideoControls,
-                  fit: BoxFit.cover,
-                ),
+                child: ctrl.bgPlayback == null
+                    ? const SizedBox.expand()
+                    : YoutubeWebVideo(
+                        key: ObjectKey(ctrl.bgPlayback),
+                        playback: ctrl.bgPlayback!,
+                        fit: BoxFit.cover,
+                      ),
               ),
             ),
           ],

@@ -1028,6 +1028,7 @@ class BodyCinemaState extends State<BodyCinema> {
       case AcaoFicha.trailer:
         // Já rodando: A volta para o player em vez de desligar o vídeo —
         // desligar é trabalho de B, um passo acima.
+        _controleTrailer.reproduzir();
         setState(() {
           _trailerFicha = true;
           _zonaFicha = ZonaFicha.player;
