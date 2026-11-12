@@ -216,8 +216,9 @@ Futurista — porque todos passam por `PrincipalCtrl.btnEntrar`.
    qualquer trabalho de bastidor.
 3. **Preparação.** Mouse, fixação da janela, reposicionamento do ícone e foco
    acontecem *dentro* da espera, não depois dela.
-4. **Dois segundos** (`esperaAntesDoJogo`), descontando o que a preparação já
-   consumiu: o jogo sobe sempre 2 s depois de a animação aparecer.
+4. **Um segundo** (`esperaAntesDoJogo`), descontando o que a preparação já
+   consumiu: a abertura é solicitada após esse intervalo ou ao terminar a
+   preparação, caso ela demore mais.
 5. **`db.openFile`.** Só agora o jogo abre.
 6. **Espera do jogador.** A folha **não** se fecha sozinha: ela fica na tela
    enquanto o jogo está na frente e só sai com A ou B, com mínimo de 2 s.

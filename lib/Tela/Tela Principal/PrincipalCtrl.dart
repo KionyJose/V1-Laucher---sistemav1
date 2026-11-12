@@ -1251,7 +1251,7 @@ class PrincipalCtrl with ChangeNotifier{
   }
 
   /// Quanto tempo a animação de abertura fica na tela antes de o jogo subir.
-  static const esperaAntesDoJogo = Duration(seconds: 2);
+  static const esperaAntesDoJogo = Duration(seconds: 1);
 
   /// Janela em que um clique atrasado da mesma rajada ainda é ignorado.
   static const resfriamentoDoClique = Duration(milliseconds: 600);
@@ -1303,9 +1303,9 @@ class PrincipalCtrl with ChangeNotifier{
       cardGamesGrid && cardInf ? focusNodeCardInf[selectedIndexCardInfo].requestFocus() : focusNodeIcones[selectedIndexIcone].requestFocus();
       attTela();
 
-      // 2. Desconta o que a preparação já consumiu: o jogo abre sempre dois
-      //    segundos depois da animação aparecer, não dois segundos depois
-      //    de terminar o trabalho de bastidor.
+      // 2. Desconta o que a preparação já consumiu do intervalo de um segundo
+      //    desde a animação aparecer, sem acrescentar outra espera completa
+      //    depois do trabalho de bastidor.
       final restante =
           esperaAntesDoJogo - DateTime.now().difference(abriuAnimacao);
       if (restante > Duration.zero) await Future.delayed(restante);

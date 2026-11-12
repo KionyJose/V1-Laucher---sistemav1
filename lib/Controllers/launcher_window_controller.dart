@@ -75,6 +75,14 @@ class LauncherWindowController with WindowListener, ScreenListener {
             await screenRetriever.getPrimaryDisplay();
         final area = (monitor.visiblePosition ?? Offset.zero) &
             (monitor.visibleSize ?? monitor.size);
+        // Compensa a faixa residual da barra oculta deslocando a janela para
+        // baixo pela diferença real até o fim do monitor. A tolerância inclui
+        // os 3 pixels observados e o arredondamento das medidas do Windows.
+        // Reservas maiores continuam respeitadas para a barra visível.
+        final bottomGap = monitor.size.height - area.height;
+        const revealStrip = 4.0;
+        final dockBottom = area.bottom +
+            (bottomGap > 0 && bottomGap <= revealStrip ? bottomGap : 0);
         final height = area.height * slimHeightFraction;
         if (await windowManager.isMaximized()) await windowManager.unmaximize();
         await windowManager.setAsFrameless();
@@ -84,7 +92,7 @@ class LauncherWindowController with WindowListener, ScreenListener {
         await windowManager.setMaximizable(false);
         _dockBounds = Rect.fromLTWH(
           area.left,
-          area.bottom - height,
+          dockBottom - height,
           area.width,
           height,
         );
