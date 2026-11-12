@@ -29,17 +29,31 @@ class LauncherStylePreview extends StatelessWidget {
                     if (style == 'futurista')
                       Image.asset('assets/Futurista/aurora_lake.png',
                           fit: BoxFit.cover),
-                    if (style != 'futurista' && style != 'slim')
+                    if (style == 'gta_vi')
+                      const DecoratedBox(
+                          decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                            Color(0xFF373459),
+                            Color(0xFF9A668D),
+                            Color(0xFFD88C99)
+                          ]))),
+                    if (style != 'futurista' &&
+                        style != 'slim' &&
+                        style != 'gta_vi')
                       Opacity(opacity: .28, child: _arte(0)),
-                    const DecoratedBox(
-                        decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                          Color(0x50080A12),
-                          Color(0xE6080A12)
-                        ]))),
+                    if (style != 'gta_vi')
+                      const DecoratedBox(
+                          decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                            Color(0x50080A12),
+                            Color(0xE6080A12)
+                          ]))),
                     if (style != 'slim') _cabecalho(),
                     ..._conteudo(),
                   ]),
@@ -139,6 +153,70 @@ class LauncherStylePreview extends StatelessWidget {
               letterSpacing: .8));
 
   List<Widget> _conteudo() => switch (style) {
+        'gta_vi' => [
+            Positioned(
+                right: 10,
+                top: 80,
+                bottom: 90,
+                width: 510,
+                child: Image.asset('assets/GtaVI/couple.png',
+                    fit: BoxFit.contain)),
+            Positioned(
+                left: 42,
+                top: 105,
+                width: 120,
+                height: 88,
+                child:
+                    Image.asset('assets/GtaVI/logo.png', fit: BoxFit.contain)),
+            Positioned(
+                left: 42,
+                top: 210,
+                child: _texto('LEONIDA · DO SEU JEITO', 13,
+                    color: const Color(0xFFFF8FBD))),
+            Positioned(
+                left: 42,
+                top: 245,
+                child: _texto('O seu lado do paraíso.', 32)),
+            Positioned(
+                left: 42,
+                top: 330,
+                right: 250,
+                child: Row(children: [
+                  for (final item in [
+                    ('VICE FEED', 'cruiser'),
+                    ('LEONIDA WIRE', 'phone')
+                  ])
+                    Expanded(
+                        child: Container(
+                            height: 90,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                gradient: const LinearGradient(colors: [
+                                  Color(0x005A436A),
+                                  Color(0xAA5A436A)
+                                ])),
+                            child: Row(children: [
+                              Image.asset('assets/GtaVI/${item.$2}.png',
+                                  width: 65),
+                              Expanded(child: _texto(item.$1, 12))
+                            ]))),
+                ])),
+            Positioned(
+                left: 42,
+                right: 42,
+                bottom: 24,
+                child: Row(children: [
+                  for (var i = 0; i < 6; i++) ...[
+                    const SizedBox(
+                        width: 52,
+                        height: 42,
+                        child: Icon(Icons.sports_esports_rounded,
+                            color: Color(0xFFFFF3E5), size: 30)),
+                    const SizedBox(width: 18),
+                  ]
+                ])),
+          ],
         'grid' => [
             Positioned(left: 42, top: 112, child: _texto('BIBLIOTECA', 18)),
             Positioned(

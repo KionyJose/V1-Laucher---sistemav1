@@ -61,6 +61,7 @@ class PrincipalCtrl with ChangeNotifier{
   /// basta — trocava o corpo fora da janela protegida. Era o caminho da tela
   /// preta ao sair de Principal para Transversal.
   bool futuristicMode = false;
+  bool gtaViMode = false;
   bool transversalMode = false;
   bool compactNavigation = false;
 
@@ -81,7 +82,8 @@ class PrincipalCtrl with ChangeNotifier{
     futuristicMode = !slimMode && configSistema.viewType == 'futurista';
     transversalMode =
         !slimMode && !cardGamesGrid && configSistema.viewType == 'transversal';
-    compactNavigation = slimMode || futuristicMode;
+    gtaViMode = !slimMode && !cardGamesGrid && configSistema.viewType == 'gta_vi';
+    compactNavigation = slimMode || futuristicMode || gtaViMode;
   }
   bool interfaceChanging = false;
   int interfaceRevision = 0;
@@ -1477,7 +1479,7 @@ class PrincipalCtrl with ChangeNotifier{
     try{
     stateTela = false;
     WidgetsBinding.instance.addPostFrameCallback((_) async  {
-
+      if (_disposed || !ctx.mounted) return;
       String retorno = await PopMais.mais(ctx, futuristic: futuristicMode);
       debugPrint(retorno);
       if(retorno.isEmpty){ 
@@ -1651,6 +1653,9 @@ class PrincipalCtrl with ChangeNotifier{
       }      
 
     });
+    // Abas estáticas podem não ter outro frame agendado. O post-frame do Mais
+    // precisa de um frame explícito para abrir também sem animação em curso.
+    WidgetsBinding.instance.ensureVisualUpdate();
     debugPrint("Finalizei btnMais");
     }catch(e){
       debugPrint("ERO BTNMAIS === $e");

@@ -27,6 +27,7 @@ import 'Widgets/bodyIconesJogosRetro.dart';
 import 'Widgets/CardInfWidget.dart';
 import 'Widgets/ListVideosWidget.dart';
 import 'Widgets/BodySlim.dart';
+import '../../Interface/gta_vi/gta_vi_body.dart';
 import 'Widgets/body_futurista.dart';
 import '../../Widgets/launcher_window_controls.dart';
 import '../../Interface/futuristic_artwork.dart';
@@ -145,6 +146,14 @@ class _PrincipalPageState extends State<PrincipalPage> with WindowListener {
                     size: 48)),
           ),
         ]),
+      );
+    }
+    if (ctrl.gtaViMode) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF160E23),
+        body: !ctrl.telaIniciada || ctrl.load
+            ? const LoadingIco(color: Color(0xFFFF8FBD))
+            : GtaViBody(ctrl: ctrl),
       );
     }
     if (ctrl.futuristicMode) {

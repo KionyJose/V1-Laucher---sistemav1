@@ -117,6 +117,12 @@ List<TelaDoLauncher> telasDoLauncher() => [
         ],
       ),
       const TelaDoLauncher(
+        id: 'gta_vi',
+        nome: 'GTA VI · Vice City',
+        icone: Icons.local_florist_rounded,
+        resumo: 'Vice City em camadas, paralaxe, vídeos e notícias.',
+      ),
+      const TelaDoLauncher(
         id: TelaDoLauncher.idSlim,
         nome: 'Slim',
         icone: Icons.width_normal_rounded,

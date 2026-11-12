@@ -8,9 +8,11 @@ import '../Controllers/launcher_window_controller.dart';
 
 /// Controles de janela compartilhados pelos modos Fat e Slim.
 class LauncherWindowControls extends StatelessWidget {
-  const LauncherWindowControls({super.key, this.slim = false});
+  const LauncherWindowControls(
+      {super.key, this.slim = false, this.transparent = false});
 
   final bool slim;
+  final bool transparent;
 
   @override
   Widget build(BuildContext context) => Consumer2<JanelaCtrl, Paad>(
@@ -26,15 +28,19 @@ class LauncherWindowControls extends StatelessWidget {
                   bottom: slim ? 4 * scale : 0),
               child: ExcludeFocus(
                 child: SizedBox(
-                  height: slim
+                  height: (slim
                       ? 36 * scale
-                      : MediaQuery.sizeOf(context).height * .054,
+                      : MediaQuery.sizeOf(context).height * .054) * .8,
                   child: FittedBox(
                     alignment: Alignment.centerRight,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       decoration: BoxDecoration(
-                        color: slim ? Colors.black : Colors.black54,
+                        color: transparent
+                            ? Colors.transparent
+                            : slim
+                                ? Colors.black
+                                : Colors.black54,
                         borderRadius: BorderRadius.circular(15),
                       ),
                       child: Row(
@@ -58,7 +64,7 @@ class LauncherWindowControls extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          if (!slim)
+                          if (!slim && !transparent)
                             const Text('Versao 5   ',
                                 style: TextStyle(
                                     fontSize: 12, color: Colors.yellow)),

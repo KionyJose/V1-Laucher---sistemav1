@@ -86,6 +86,7 @@ flutter:
         - asset: assets/Futurista/Oxanium.ttf
 
   assets:
+    - assets/GtaVI/
     - assets/Futurista/
     - assets/Lojas/
     - assets/Repack/
